@@ -1,0 +1,55 @@
+https://github.com/saif01/mobile-app-wifi-gate-react-native.git
+
+
+
+
+For Run app in terminal 
+
+    from project root:
+
+    npx expo run:android
+
+    Run only: 
+    
+    npx expo start --android --offline --clear
+    npx expo start --clear
+
+    npx expo start --android
+
+    
+
+    npx expo start --tunnel
+    npx expo start --tunnel --clear
+
+
+
+Fresh build android apk for production in local
+
+    for gitbash terminal Inside android folder: 
+    ./gradlew clean -x :app:externalNativeBuildCleanDebug -x :app:externalNativeBuildCleanRelease
+    ./gradlew assembleRelease
+    
+
+
+Fresh build android apk for production by expo
+
+    npx eas login
+    npx eas build --platform android --profile production --clear-cache
+    npx eas build:list --platform android --limit 1
+    npx eas build:download --platform android --latest
+
+
+Recommended for Modern phones Production:
+reactNativeArchitectures=arm64-v8a
+
+Recommended for Old + Modern phones only Production:
+reactNativeArchitectures=armeabi-v7a,arm64-v8a
+
+For all kind of device All supports:
+reactNativeArchitectures=armeabi-v7a,arm64-v8a,x86,x86_64
+
+
+
+Jest tests sequentially (one by one)
+
+    npx jest --runInBand
