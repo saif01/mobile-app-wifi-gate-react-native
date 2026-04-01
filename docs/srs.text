@@ -1,0 +1,418 @@
+Use this **Cursor-ready prompt**:
+
+---
+
+**Prompt for Cursor: Build “WiFiGate” Firewall Login App with Expo React Native**
+
+Build a **production-standard mobile app named `WiFiGate`** using **Expo React Native + TypeScript**. First understand the current real-world firewall login process that users now do manually from a mobile browser, then design and implement the app in a secure, stable, scalable, and maintainable way.
+
+## App Name
+
+**WiFiGate**
+
+## Project Context
+
+Currently, users open this firewall login page in the mobile browser:
+
+`http://10.64.4.253:8090`
+
+Then they enter their **ID** and **Password**. If login is successful, the device can use the WiFi internet.
+
+Now build a mobile app called **WiFiGate** that manages and automates this firewall login flow properly.
+
+---
+
+## Main Requirements
+
+### 1. Editable Firewall Endpoint
+
+* The default firewall login endpoint is:
+  `http://10.64.4.253:8090`
+* This endpoint must be **editable from inside the app**
+* Create a configuration/settings screen where the user can:
+
+  * view the current endpoint
+  * edit and save the endpoint
+  * validate endpoint format before saving
+* Save the endpoint locally and load it on app startup
+
+### 2. WiFi-Based Login Restriction
+
+* Login must be possible **only when the mobile device is connected to an allowed WiFi network**
+* Multiple allowed WiFi networks should be supported
+* When the app opens:
+
+  * detect the current network connection
+  * check whether the device is connected to WiFi
+  * compare the current WiFi information with the configured allowed network list
+* If matched:
+
+  * allow login
+* If not matched:
+
+  * block login
+  * show a clear warning message
+
+### 3. Multiple Allowed WiFi Match Logic
+
+* Add support for configuring multiple allowed WiFi entries
+* Each entry may contain:
+
+  * SSID / WiFi name
+  * gateway IP / local IP match rule / network identifier
+  * remarks
+  * active/inactive status
+* Create reusable logic to match the current connected WiFi with one of the configured entries
+
+### 4. Mobile Data Handling
+
+* When the device is connected to an allowed WiFi, the app should try to ensure the firewall login process uses WiFi
+* If Expo cannot directly disable mobile data, implement the best possible practical logic:
+
+  * detect current network type
+  * warn user if mobile data may interfere
+  * prefer WiFi connection path
+  * structure the code so native enhancement can be added later if needed
+* Clearly document technical limitations where direct OS-level network disabling is not possible
+
+### 5. Firewall Login Flow
+
+* Create a login screen with:
+
+  * User ID input
+  * Password input
+  * Show/Hide password
+  * Remember credentials option
+  * Login button
+* On login:
+
+  * verify current WiFi matches allowed list
+  * use the saved endpoint
+  * submit the ID and Password to the firewall login process
+* Handle:
+
+  * successful login
+  * invalid credentials
+  * timeout
+  * endpoint unreachable
+  * unauthorized WiFi
+  * unexpected response
+* On success:
+
+  * mark the user as authenticated
+  * show success status
+  * navigate to dashboard/home screen
+
+### 6. Stored ID and Password
+
+* User ID and Password should be stored securely
+* Never store credentials in plain text
+* Use **Expo SecureStore** for credentials and sensitive auth/session data
+* Auto-fill saved credentials if the user enables that feature
+
+### 7. Fingerprint Login
+
+* If the mobile device supports fingerprint authentication, enable biometric login
+* Use Expo-compatible biometric authentication
+* Fingerprint login should only be enabled after at least one successful manual login
+* On successful biometric authentication:
+
+  * retrieve saved credentials securely
+  * attempt firewall login automatically
+* On biometric failure:
+
+  * allow fallback to manual login
+* Add setting to enable or disable fingerprint login
+
+### 8. Background / Keep-Alive Behavior
+
+* The app should preserve session state when running in background
+* Implement the maximum reliable background-safe behavior Expo allows
+* Structure services so future native enhancement can support:
+
+  * periodic revalidation
+  * keep-alive
+  * silent session checks
+* If full background keep-alive is limited by Expo, document that clearly and implement the best possible supported solution
+
+---
+
+## Important Technical Requirement
+
+Before implementation, first analyze how the firewall login page actually works:
+
+* whether the page uses HTML form POST
+* whether cookies/session are required
+* whether hidden input fields exist
+* whether redirects happen after login
+* whether login can be done with direct request submission
+* whether WebView-assisted login is more reliable
+
+Then choose the best implementation approach:
+
+1. **Direct HTTP form submission** if reliable
+2. **Hybrid/WebView-assisted flow** if the firewall page requires browser session/cookies/hidden form handling
+
+The solution must preserve app-level features such as:
+
+* WiFi checking
+* saved credentials
+* fingerprint login
+* editable endpoint
+* status tracking
+* logs
+
+---
+
+## Tech Stack
+
+Use:
+
+* Expo React Native
+* TypeScript
+* Expo Router or clean React Navigation
+* Axios for HTTP/network handling
+* Expo SecureStore for sensitive data
+* AsyncStorage for non-sensitive settings/config
+* React Hook Form + Zod for validation
+* Zustand or Context API for state management
+
+---
+
+## Required Screens
+
+Create these screens for **WiFiGate**:
+
+* Splash Screen
+* Login Screen
+* Dashboard / Home Screen
+* Settings Screen
+* Firewall Endpoint Configuration Screen
+* Allowed WiFi Configuration Screen
+* Biometric/Fingerprint Settings
+* Logs / Activity Screen
+* WiFi Status / Session Status Card or section
+
+---
+
+## Dashboard Features
+
+After successful login, the dashboard should show:
+
+* app name: **WiFiGate**
+* current authentication status
+* current WiFi status
+* whether current WiFi matches an allowed network
+* matched network details
+* current firewall endpoint
+* last login time
+* session state
+* quick actions:
+
+  * Login / Re-login
+  * Refresh status
+  * Recheck WiFi
+  * Open settings
+  * Logout
+
+---
+
+## Settings and Configuration
+
+Allow user to configure:
+
+* firewall endpoint
+* allowed WiFi network list
+* remember credentials
+* fingerprint login
+* app info/version
+* background behavior preferences if applicable
+
+---
+
+## WiFi and Network Detection
+
+Implement robust network checking:
+
+* detect connection type
+* detect WiFi status
+* detect WiFi identifiers where possible
+* compare against configured allowed list
+* show clear status:
+
+  * authorized WiFi connected
+  * unauthorized WiFi connected
+  * mobile data active
+  * offline
+* handle Android permissions properly
+
+---
+
+## Security Requirements
+
+* never store passwords in plain text
+* use secure local storage
+* prevent duplicate login requests
+* use request timeout and retry rules
+* centralize error handling
+* sanitize user input
+* clear secure data on logout
+* make the system future-ready for HTTPS/certificate improvements
+* do not hardcode sensitive business logic unnecessarily
+
+---
+
+## App Startup Flow
+
+On app launch:
+
+1. Show splash screen
+2. Load saved endpoint and allowed WiFi config
+3. Check current network type
+4. Check if current WiFi matches allowed list
+5. Load saved credentials/session if available
+6. If fingerprint enabled, show biometric option
+7. Route user to the proper screen
+
+---
+
+## Logging / Activity
+
+Maintain local logs for:
+
+* app open
+* WiFi matched / not matched
+* login attempt
+* login success / failure
+* fingerprint success / failure
+* logout
+* endpoint updated
+* allowed WiFi configuration changes
+
+Show logs in a clean local activity screen.
+
+---
+
+## Error Handling
+
+Handle all major cases:
+
+* no WiFi
+* wrong WiFi
+* mobile data active
+* invalid credentials
+* endpoint unreachable
+* server timeout
+* session expired
+* biometric not available
+* biometric failed
+* missing config
+* unknown response
+
+Show user-friendly error messages.
+
+---
+
+## UI/UX Requirements
+
+Design **WiFiGate** with:
+
+* modern, compact, enterprise-style UI
+* professional login experience
+* clear WiFi/network status indicators
+* reusable components
+* proper loading, success, empty, and error states
+* Android-focused responsive design
+* clean visual hierarchy
+
+---
+
+## Folder Structure
+
+Use a clean scalable structure like:
+
+* `app/` or `screens/`
+* `components/`
+* `services/`
+* `hooks/`
+* `store/`
+* `types/`
+* `utils/`
+* `constants/`
+* `config/`
+
+Create reusable services for:
+
+* auth service
+* firewall login service
+* network/WiFi service
+* biometric service
+* secure storage service
+* config/settings service
+* activity log service
+
+---
+
+## Expected Deliverables
+
+Build a complete Expo React Native project for **WiFiGate** with:
+
+* clean architecture
+* editable firewall endpoint
+* allowed WiFi list management
+* WiFi-restricted login flow
+* secure saved credentials
+* fingerprint login
+* best possible background/session persistence structure
+* activity logs
+* professional enterprise UI
+* proper README documentation
+
+---
+
+## README Must Include
+
+* project overview
+* app purpose
+* setup steps
+* environment/configuration steps
+* permissions needed
+* firewall login flow
+* WiFi match logic
+* biometric flow
+* storage/security design
+* Expo limitations and future native enhancement points
+
+---
+
+## Final Instruction
+
+Do not build a quick demo. Build **WiFiGate** as a **real, maintainable, production-ready Expo app**.
+Start by analyzing the real firewall browser login behavior first, then implement the most reliable architecture.
+Focus on:
+
+* WiFi-restricted login
+* configurable endpoint
+* multiple allowed WiFi support
+* secure credential storage
+* fingerprint authentication
+* session persistence
+* background-safe behavior
+* enterprise-grade code quality
+
+Also generate:
+
+1. recommended project folder structure
+2. required Expo packages
+3. implementation steps in order
+4. limitations of Expo for WiFi detection, mobile data disabling, and background keep-alive
+5. best fallback approach where Expo cannot fully control OS/network behavior
+
+---
+
+If you want, I can also convert this into a **super-structured Cursor prompt** with:
+
+* exact package names
+* screen-by-screen task list
+* service-by-service breakdown
+* starter TypeScript interfaces and folder tree
