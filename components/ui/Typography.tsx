@@ -1,11 +1,13 @@
 import { StyleSheet, Text, TextProps } from 'react-native';
 
+import { theme } from '@/constants/theme';
+
 export function Title(props: TextProps) {
   return <Text {...props} style={[styles.title, props.style]} />;
 }
 
 export function Subtitle(props: TextProps) {
-  return <Text {...props} style={[styles.sub, props.style]} />;
+  return <Text {...props} style={[styles.subtitle, props.style]} />;
 }
 
 export function Body(props: TextProps) {
@@ -13,12 +15,41 @@ export function Body(props: TextProps) {
 }
 
 export function Caption(props: TextProps) {
-  return <Text {...props} style={[styles.cap, props.style]} />;
+  return <Text {...props} style={[styles.caption, props.style]} />;
+}
+
+export function Eyebrow(props: TextProps) {
+  return <Text {...props} style={[styles.eyebrow, props.style]} />;
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 22, fontWeight: '700', color: '#f2f5f9', letterSpacing: 0.3 },
-  sub: { fontSize: 15, color: '#9aa7b8', marginTop: 6 },
-  body: { fontSize: 15, color: '#dce4ee', lineHeight: 22 },
-  cap: { fontSize: 12, color: '#7d8a99' },
+  title: {
+    color: theme.colors.text,
+    fontSize: theme.typography.title,
+    fontWeight: '800',
+    letterSpacing: -0.7,
+  },
+  subtitle: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.subtitle,
+    fontWeight: '600',
+    letterSpacing: -0.3,
+  },
+  body: {
+    color: theme.colors.textMuted,
+    fontSize: theme.typography.body,
+    lineHeight: 20,
+  },
+  caption: {
+    color: theme.colors.textSoft,
+    fontSize: theme.typography.caption,
+    lineHeight: 16,
+  },
+  eyebrow: {
+    color: theme.colors.cyan,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.3,
+    textTransform: 'uppercase',
+  },
 });

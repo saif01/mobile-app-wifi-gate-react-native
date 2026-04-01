@@ -1,25 +1,39 @@
 import * as SecureStore from 'expo-secure-store';
 import { STORAGE_KEYS } from '@/constants/defaults';
+import type { SavedCredentials } from '@/types/models';
 
-export async function saveCredentials(userId: string, password: string): Promise<void> {
+export async function saveSuccessfulCredentials(userId: string, password: string, lastLoginAt: number): Promise<void> {
   await SecureStore.setItemAsync(STORAGE_KEYS.CRED_USER, userId, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED,
   });
   await SecureStore.setItemAsync(STORAGE_KEYS.CRED_PASS, password, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED,
   });
+  await SecureStore.setItemAsync(STORAGE_KEYS.CRED_META, new Date(lastLoginAt).toISOString(), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED,
+  });
 }
 
-export async function loadCredentials(): Promise<{ userId: string; password: string } | null> {
+export async function getSavedCredentials(): Promise<SavedCredentials | null> {
   const userId = await SecureStore.getItemAsync(STORAGE_KEYS.CRED_USER);
   const password = await SecureStore.getItemAsync(STORAGE_KEYS.CRED_PASS);
+  const lastLoginAt = await SecureStore.getItemAsync(STORAGE_KEYS.CRED_META);
   if (!userId || !password) return null;
-  return { userId, password };
+  return {
+    userId,
+    password,
+    lastLoginAt: lastLoginAt ?? new Date(0).toISOString(),
+  };
 }
 
-export async function clearCredentials(): Promise<void> {
+export async function clearSavedCredentials(): Promise<void> {
   await SecureStore.deleteItemAsync(STORAGE_KEYS.CRED_USER);
   await SecureStore.deleteItemAsync(STORAGE_KEYS.CRED_PASS);
+  await SecureStore.deleteItemAsync(STORAGE_KEYS.CRED_META);
+}
+
+export async function hasSavedCredentials(): Promise<boolean> {
+  return (await getSavedCredentials()) !== null;
 }
 
 export async function setSessionAuthenticated(flag: boolean): Promise<void> {

@@ -3,6 +3,8 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 
+import { theme } from '@/constants/theme';
+
 export { ErrorBoundary } from 'expo-router';
 
 SplashScreen.preventAutoHideAsync();
@@ -11,11 +13,11 @@ const navTheme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    background: '#0f1419',
-    card: '#0f1419',
-    primary: '#3dd6c6',
-    text: '#f2f5f9',
-    border: '#1f2a36',
+    background: theme.colors.bg,
+    card: theme.colors.bg,
+    primary: theme.colors.primary,
+    text: theme.colors.text,
+    border: theme.colors.border,
   },
 };
 
@@ -25,20 +27,21 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <Stack
         screenOptions={{
-          headerStyle: { backgroundColor: '#0f1419' },
-          headerTintColor: '#f2f5f9',
-          headerTitleStyle: { fontWeight: '600' },
-          contentStyle: { backgroundColor: '#0f1419' },
+          headerStyle: { backgroundColor: theme.colors.bg },
+          headerTintColor: theme.colors.text,
+          headerTitleStyle: { fontWeight: '700' },
+          contentStyle: { backgroundColor: theme.colors.bg },
         }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false, title: 'Sign in' }} />
-        <Stack.Screen name="dashboard" options={{ title: 'WiFiGate' }} />
-        <Stack.Screen name="logs" options={{ title: 'Activity' }} />
-        <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-        <Stack.Screen name="endpoint" options={{ title: 'Firewall endpoint' }} />
-        <Stack.Screen name="wifi" options={{ title: 'Allowed Wi‑Fi' }} />
-        <Stack.Screen name="biometric" options={{ title: 'Biometric login' }} />
-        <Stack.Screen name="webview-login" options={{ title: 'Browser login' }} />
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+        <Stack.Screen name="dashboard" options={{ headerShown: false }} />
+        <Stack.Screen name="logs" options={{ headerShown: false }} />
+        <Stack.Screen name="settings" options={{ headerShown: false }} />
+        <Stack.Screen name="endpoint" options={{ title: 'Firewall Endpoint' }} />
+        <Stack.Screen name="wifi" options={{ headerShown: false }} />
+        <Stack.Screen name="biometric" options={{ title: 'Biometric Login' }} />
+        <Stack.Screen name="webview-login" options={{ title: 'Browser Login', presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
   );

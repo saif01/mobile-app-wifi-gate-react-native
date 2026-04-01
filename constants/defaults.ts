@@ -9,6 +9,7 @@ export const STORAGE_KEYS = {
   SETTINGS_V1: 'wifigate_settings_v1',
   CRED_USER: 'wifigate_cred_user',
   CRED_PASS: 'wifigate_cred_pass',
+  CRED_META: 'wifigate_cred_meta',
   SESSION_FLAG: 'wifigate_session_ok',
   BIOMETRIC_ENABLED: 'wifigate_biometric_enabled',
   MANUAL_LOGIN_DONE: 'wifigate_manual_login_once',

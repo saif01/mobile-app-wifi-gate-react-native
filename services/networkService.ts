@@ -1,70 +1,187 @@
 import NetInfo from '@react-native-community/netinfo';
-import type { AllowedWifiEntry, NetworkSnapshot } from '@/types/models';
+import * as Location from 'expo-location';
 import { Platform } from 'react-native';
+
+import type {
+  AllowedWifiEntry,
+  CurrentWifiInfo,
+  NetworkSnapshot,
+  WifiAccessEvaluation,
+} from '@/types/models';
+
+NetInfo.configure({ shouldFetchWiFiSSID: true });
+
+type LocationPermissionState = {
+  granted: boolean;
+  canAskAgain: boolean;
+};
+
+function normalizeSsid(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
+function normalizeIp(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
 
 function pickSsid(details: Record<string, unknown> | null | undefined): string | null {
   if (!details) return null;
   const ssid = (details as { ssid?: string }).ssid;
-  return typeof ssid === 'string' && ssid.length > 0 ? ssid : null;
+  if (typeof ssid !== 'string') return null;
+  const normalized = ssid.trim();
+  if (!normalized || normalized === '<unknown ssid>') return null;
+  return normalized;
 }
 
 function pickIp(details: Record<string, unknown> | null | undefined): string | null {
   if (!details) return null;
   const ip = (details as { ipAddress?: string }).ipAddress;
-  return typeof ip === 'string' && ip.length > 0 ? ip : null;
+  return typeof ip === 'string' && ip.trim().length > 0 ? ip.trim() : null;
 }
 
-/** Gateway is not always exposed by NetInfo; use optional subnet hints from ip. */
+function deriveGateway(ipAddress: string | null): string | null {
+  if (!ipAddress) return null;
+  const parts = ipAddress.split('.');
+  if (parts.length !== 4) return null;
+  return `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+}
+
+async function getLocationPermissionState(requestPermission: boolean): Promise<LocationPermissionState> {
+  if (Platform.OS !== 'android') {
+    return { granted: true, canAskAgain: false };
+  }
+
+  const current = await Location.getForegroundPermissionsAsync();
+  if (current.granted || !requestPermission) {
+    return {
+      granted: current.granted,
+      canAskAgain: current.canAskAgain ?? false,
+    };
+  }
+
+  const requested = await Location.requestForegroundPermissionsAsync();
+  return {
+    granted: requested.granted,
+    canAskAgain: requested.canAskAgain ?? false,
+  };
+}
+
+export async function getCurrentWifiInfo(options?: {
+  requestPermission?: boolean;
+}): Promise<CurrentWifiInfo> {
+  const permission = await getLocationPermissionState(options?.requestPermission === true);
+  const netInfo = await NetInfo.fetch();
+  const type = netInfo.type;
+  const isWifi = type === 'wifi';
+  const details = netInfo.details as Record<string, unknown> | undefined;
+  const ip = pickIp(details) ?? undefined;
+  const gateway = deriveGateway(ip ?? null) ?? undefined;
+  const ssid =
+    isWifi && permission.granted
+      ? pickSsid(details) ?? undefined
+      : undefined;
+
+  let permissionMessage: string | undefined;
+  if (Platform.OS === 'android' && !permission.granted) {
+    permissionMessage = 'Location permission is required to detect WiFi network name.';
+  } else if (isWifi && !ssid) {
+    permissionMessage = 'WiFi name could not be detected on this device.';
+  }
+
+  return {
+    isConnected: netInfo.isConnected === true,
+    isWifi,
+    ssid,
+    ip,
+    gateway,
+    permissionGranted: permission.granted,
+    canAskPermissionAgain: permission.canAskAgain,
+    permissionMessage,
+  };
+}
+
 export async function getNetworkSnapshot(): Promise<NetworkSnapshot> {
   const netInfo = await NetInfo.fetch();
-
   const type = netInfo.type;
   const isWifi = type === 'wifi';
   const isCellular = type === 'cellular';
   const details = netInfo.details as Record<string, unknown> | undefined;
-
-  const ssid = isWifi ? pickSsid(details) : null;
   const ipAddress = pickIp(details);
-
-  /** OS cannot reliably expose dual WiFi+cellular; Android users get a soft hint when on Wi‑Fi. */
-  const cellularMayInterfere = Platform.OS === 'android' && isWifi;
-
-  let gatewayIp: string | null = null;
-  if (ipAddress && isWifi) {
-    const parts = ipAddress.split('.');
-    if (parts.length === 4) {
-      gatewayIp = `${parts[0]}.${parts[1]}.${parts[2]}.1`;
-    }
-  }
+  const gatewayIp = isWifi ? deriveGateway(ipAddress) : null;
 
   return {
     isConnected: netInfo.isConnected === true,
     type,
     isWifi,
     isCellular,
-    ssid,
+    ssid: isWifi ? pickSsid(details) : null,
     ipAddress,
     gatewayIp,
-    cellularMayInterfere,
+    cellularMayInterfere: Platform.OS === 'android' && isWifi,
   };
 }
 
+export function findDuplicateAllowedWifi(
+  entries: AllowedWifiEntry[],
+  candidate: Pick<AllowedWifiEntry, 'ssid' | 'ip'>,
+  excludeId?: string
+): AllowedWifiEntry | null {
+  const candidateSsid = normalizeSsid(candidate.ssid);
+  const candidateIp = normalizeIp(candidate.ip);
+
+  if (!candidateSsid && !candidateIp) return null;
+
+  for (const entry of entries) {
+    if (excludeId && entry.id === excludeId) continue;
+    const sameSsid = candidateSsid && normalizeSsid(entry.ssid) === candidateSsid;
+    const sameIp = candidateIp && normalizeIp(entry.ip) === candidateIp;
+    if (sameSsid || sameIp) return entry;
+  }
+
+  return null;
+}
+
 export function matchAllowedWifi(
-  snapshot: NetworkSnapshot,
+  snapshot: Pick<NetworkSnapshot, 'isConnected' | 'isWifi' | 'ssid' | 'ipAddress' | 'gatewayIp'>,
   entries: AllowedWifiEntry[]
 ): AllowedWifiEntry | null {
   if (!snapshot.isWifi || !snapshot.isConnected) return null;
-  const active = entries.filter((e) => e.active);
-  for (const e of active) {
-    const ssidOk =
-      e.ssid &&
-      snapshot.ssid &&
-      snapshot.ssid.trim().toLowerCase() === e.ssid.trim().toLowerCase();
-    const gatewayOk =
-      e.gatewayMatch &&
-      ((snapshot.gatewayIp && snapshot.gatewayIp.includes(e.gatewayMatch)) ||
-        (snapshot.ipAddress && snapshot.ipAddress.includes(e.gatewayMatch)));
-    if (ssidOk || gatewayOk) return e;
+
+  const currentSsid = normalizeSsid(snapshot.ssid);
+  const currentIp = normalizeIp(snapshot.ipAddress);
+  const gatewayIp = normalizeIp(snapshot.gatewayIp);
+
+  for (const entry of entries) {
+    if (!entry.isActive) continue;
+    const ssidMatches = currentSsid && normalizeSsid(entry.ssid) === currentSsid;
+    const ipMatches =
+      normalizeIp(entry.ip) &&
+      (normalizeIp(entry.ip) === currentIp || normalizeIp(entry.ip) === gatewayIp);
+    if (ssidMatches || ipMatches) return entry;
   }
+
   return null;
+}
+
+export function evaluateWifiAccess(
+  snapshot: NetworkSnapshot,
+  entries: AllowedWifiEntry[]
+): WifiAccessEvaluation {
+  const activeEntries = entries.filter((entry) => entry.isActive);
+  if (activeEntries.length === 0) {
+    return {
+      allowed: snapshot.isConnected,
+      noRestriction: true,
+      requiresWifiConnection: !snapshot.isConnected,
+      match: null,
+    };
+  }
+
+  const match = matchAllowedWifi(snapshot, activeEntries);
+  return {
+    allowed: Boolean(match),
+    noRestriction: false,
+    requiresWifiConnection: !snapshot.isWifi || !snapshot.isConnected,
+    match,
+  };
 }

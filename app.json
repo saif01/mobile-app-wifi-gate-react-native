@@ -29,9 +29,13 @@
         "ACCESS_WIFI_STATE",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "NEARBY_WIFI_DEVICES",
         "USE_BIOMETRIC",
-        "USE_FINGERPRINT"
-      ]
+        "USE_FINGERPRINT",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ],
+      "package": "com.syful01.WiFiGate"
     },
     "web": {
       "bundler": "metro",
@@ -44,6 +48,12 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow WiFiGate to use Face ID for secure login."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Location permission is required to detect WiFi network name."
         }
       ],
       "expo-secure-store"

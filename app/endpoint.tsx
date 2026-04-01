@@ -1,15 +1,19 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { Globe, Save } from 'lucide-react-native';
 import { Controller, useForm } from 'react-hook-form';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { z } from 'zod';
 
 import { PrimaryButton } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { InputField } from '@/components/ui/InputField';
 import { Screen } from '@/components/ui/Screen';
-import { Body, Caption, Title } from '@/components/ui/Typography';
+import { Body, Eyebrow, Subtitle, Title } from '@/components/ui/Typography';
+import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
-import { validateEndpointUrl } from '@/utils/endpoint';
 import { useAppStore } from '@/store/appStore';
+import { validateEndpointUrl } from '@/utils/endpoint';
 
 const schema = z.object({
   url: z.string().min(1, 'URL is required'),
@@ -38,47 +42,51 @@ export default function EndpointScreen() {
   });
 
   return (
-    <Screen scroll>
-      <Title>Firewall endpoint</Title>
-      <Body style={styles.desc}>Must be a valid http(s) URL to your captive portal.</Body>
+    <Screen scroll contentStyle={styles.content}>
+      <Eyebrow>Network Target</Eyebrow>
+      <Title style={styles.title}>Firewall Endpoint</Title>
+      <Subtitle>Update the captive portal URL used for direct firewall login requests.</Subtitle>
 
-      <Controller
-        control={control}
-        name="url"
-        render={({ field, fieldState }) => (
-          <View style={styles.field}>
-            <Caption>URL</Caption>
-            <TextInput
+      <Card style={styles.card}>
+        <Controller
+          control={control}
+          name="url"
+          render={({ field, fieldState }) => (
+            <InputField
+              label="Portal URL"
               value={field.value}
               onChangeText={field.onChange}
+              placeholder="http://10.64.4.253:8090"
+              icon={Globe}
+              error={fieldState.error?.message}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="http://10.64.4.253:8090"
-              placeholderTextColor="#5c6b7d"
-              style={styles.input}
             />
-            {fieldState.error ? <Caption style={styles.err}>{fieldState.error.message}</Caption> : null}
-          </View>
-        )}
-      />
+          )}
+        />
 
-      <PrimaryButton title="Save" onPress={onSubmit} />
+        <Body style={styles.help}>
+          Use the firewall portal base URL. WiFiGate will derive the direct login request from this endpoint.
+        </Body>
+
+        <PrimaryButton title="Save Endpoint" onPress={onSubmit} icon={Save} trailingArrow />
+      </Card>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  desc: { marginTop: 8, marginBottom: 16 },
-  field: { marginBottom: 16 },
-  input: {
-    marginTop: 6,
-    backgroundColor: '#111a24',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: '#f2f5f9',
-    borderWidth: 1,
-    borderColor: '#2a3441',
+  content: {
+    paddingTop: theme.spacing.xl,
   },
-  err: { color: '#ff9b9b', marginTop: 6 },
+  title: {
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
+  card: {
+    marginTop: theme.spacing.xl,
+  },
+  help: {
+    marginBottom: theme.spacing.lg,
+  },
 });

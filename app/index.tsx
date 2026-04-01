@@ -33,9 +33,9 @@ export default function SplashRoute() {
     if (!ready) return;
     const { isAuthenticated } = useAppStore.getState();
     if (isAuthenticated) {
-      router.replace('/dashboard');
+      router.replace('/(tabs)/home');
     } else {
-      router.replace('/login');
+      router.replace('/(tabs)/session');
     }
   }, [ready]);
 

@@ -1,16 +1,19 @@
 import { create } from 'zustand';
+
 import { loadSettings, saveSettings, type AppSettings } from '@/services/settingsService';
 import {
-  clearCredentials,
+  clearSavedCredentials,
   getBiometricEnabled,
   getManualLoginCompleted,
+  getSavedCredentials,
   getSessionAuthenticated,
-  loadCredentials,
-  saveCredentials,
+  hasSavedCredentials,
+  saveSuccessfulCredentials,
   setBiometricEnabled,
   setManualLoginCompleted,
   setSessionAuthenticated,
 } from '@/services/secureCredentials';
+import type { SavedCredentials } from '@/types/models';
 
 export interface AppState {
   hydrated: boolean;
@@ -19,16 +22,22 @@ export interface AppState {
   lastLoginAt: number | null;
   biometricEnabled: boolean;
   manualLoginDone: boolean;
-  /** In-memory only; secrets loaded on demand via SecureStore */
-  snapshotUserId: string | null;
+  savedCredentials: SavedCredentials | null;
 
   hydrate: () => Promise<void>;
   setSettings: (partial: Partial<AppSettings>) => Promise<void>;
   setAuthenticated: (v: boolean, lastLoginAt?: number) => Promise<void>;
-  saveUserPassword: (userId: string, password: string, remember: boolean) => Promise<void>;
+  setRememberMe: (enabled: boolean) => Promise<void>;
+  saveSuccessfulLogin: (userId: string, password: string) => Promise<number>;
   clearSession: () => Promise<void>;
   setBiometric: (v: boolean) => Promise<void>;
-  loadCredentialPreview: () => Promise<void>;
+  refreshSavedCredentials: () => Promise<void>;
+  isBiometricLoginAvailable: () => Promise<boolean>;
+}
+
+async function getEffectiveSavedCredentials(rememberMe: boolean): Promise<SavedCredentials | null> {
+  if (!rememberMe) return null;
+  return await getSavedCredentials();
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -44,24 +53,30 @@ export const useAppStore = create<AppState>((set, get) => ({
   lastLoginAt: null,
   biometricEnabled: false,
   manualLoginDone: false,
-  snapshotUserId: null,
+  savedCredentials: null,
 
   hydrate: async () => {
     const settings = await loadSettings();
-    const [session, bio, manual] = await Promise.all([
+    const [session, storedBiometric, manualLoginDone, savedCredentials] = await Promise.all([
       getSessionAuthenticated(),
       getBiometricEnabled(),
       getManualLoginCompleted(),
+      getEffectiveSavedCredentials(settings.rememberCredentials),
     ]);
-    const creds = settings.rememberCredentials ? await loadCredentials() : null;
+
+    const biometricEnabled = Boolean(storedBiometric && settings.rememberCredentials && savedCredentials);
+    if (storedBiometric !== biometricEnabled) {
+      await setBiometricEnabled(biometricEnabled);
+    }
+
     set({
       hydrated: true,
       settings,
       isAuthenticated: session,
       lastLoginAt: settings.lastLoginAt,
-      biometricEnabled: bio,
-      manualLoginDone: manual,
-      snapshotUserId: creds?.userId ?? null,
+      biometricEnabled,
+      manualLoginDone,
+      savedCredentials,
     });
   },
 
@@ -82,39 +97,98 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  saveUserPassword: async (userId, password, remember) => {
-    if (remember) {
-      await saveCredentials(userId, password);
-    } else {
-      await clearCredentials();
+  setRememberMe: async (enabled) => {
+    const next = await saveSettings({ rememberCredentials: enabled });
+
+    if (!enabled) {
+      await clearSavedCredentials();
+      await setBiometricEnabled(false);
+      set({
+        settings: next,
+        savedCredentials: null,
+        biometricEnabled: false,
+      });
+      return;
     }
-    set({ snapshotUserId: remember ? userId : null });
+
+    const savedCredentials = await getSavedCredentials();
+    set({
+      settings: next,
+      savedCredentials,
+    });
+  },
+
+  saveSuccessfulLogin: async (userId, password) => {
+    const remember = get().settings.rememberCredentials;
+    const ts = Date.now();
+
+    if (remember) {
+      await saveSuccessfulCredentials(userId, password, ts);
+    } else {
+      await clearSavedCredentials();
+    }
+
+    const savedCredentials = await getEffectiveSavedCredentials(remember);
+    await setManualLoginCompleted(true);
+    set({
+      manualLoginDone: true,
+      savedCredentials,
+    });
+    return ts;
   },
 
   clearSession: async () => {
     await setSessionAuthenticated(false);
-    await clearCredentials();
     const next = await saveSettings({ lastLoginAt: null });
-    set({ isAuthenticated: false, lastLoginAt: null, snapshotUserId: null, settings: next });
+
+    const remember = get().settings.rememberCredentials;
+    if (!remember) {
+      await clearSavedCredentials();
+    }
+
+    const savedCredentials = await getEffectiveSavedCredentials(remember);
+    const biometricEnabled = Boolean(get().biometricEnabled && remember && savedCredentials);
+    if (get().biometricEnabled !== biometricEnabled) {
+      await setBiometricEnabled(biometricEnabled);
+    }
+
+    set({
+      isAuthenticated: false,
+      lastLoginAt: null,
+      settings: next,
+      savedCredentials,
+      biometricEnabled,
+    });
   },
 
   setBiometric: async (v) => {
-    await setBiometricEnabled(v);
-    set({ biometricEnabled: v });
+    const state = get();
+    const next = Boolean(v && state.settings.rememberCredentials && state.savedCredentials);
+    await setBiometricEnabled(next);
+    set({ biometricEnabled: next });
   },
 
-  loadCredentialPreview: async () => {
-    const s = get().settings;
-    if (!s.rememberCredentials) {
-      set({ snapshotUserId: null });
-      return;
+  refreshSavedCredentials: async () => {
+    const remember = get().settings.rememberCredentials;
+    const savedCredentials = await getEffectiveSavedCredentials(remember);
+    const biometricEnabled = Boolean(get().biometricEnabled && remember && savedCredentials);
+    if (get().biometricEnabled !== biometricEnabled) {
+      await setBiometricEnabled(biometricEnabled);
     }
-    const c = await loadCredentials();
-    set({ snapshotUserId: c?.userId ?? null });
+    set({
+      savedCredentials,
+      biometricEnabled,
+    });
+  },
+
+  isBiometricLoginAvailable: async () => {
+    const state = get();
+    if (!state.settings.rememberCredentials || !state.biometricEnabled) {
+      return false;
+    }
+    if (state.savedCredentials) {
+      return true;
+    }
+    return await hasSavedCredentials();
   },
 }));
-
-export async function markManualLoginSuccess() {
-  await setManualLoginCompleted(true);
-  useAppStore.setState({ manualLoginDone: true });
-}

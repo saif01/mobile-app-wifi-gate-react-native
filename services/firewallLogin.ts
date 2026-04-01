@@ -1,9 +1,13 @@
 import axios, { type AxiosError } from 'axios';
+import { Platform } from 'react-native';
 import { HTTP_TIMEOUT_MS } from '@/constants/defaults';
 import type { FirewallLoginFailureReason, FirewallLoginResult } from '@/types/models';
 
 const USERNAME_KEYS = ['username', 'user', 'userid', 'login', 'email', 'uname', 'name'];
 const PASSWORD_KEYS = ['password', 'passwd', 'pass', 'pwd'];
+const CYBEROAM_LIVE = 'LIVE';
+const CYBEROAM_LOGGED_OUT = 'LOGIN';
+const CYBEROAM_CHALLENGE = 'CHALLENGE';
 
 function mergeSetCookie(existing: string | undefined, setCookie: string | string[] | undefined): string {
   if (!setCookie) return existing ?? '';
@@ -67,6 +71,75 @@ function pickCredentialField(keys: string[], fields: Record<string, string>): st
   return null;
 }
 
+function readXmlTag(xml: string, tag: string): string | null {
+  const re = new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?([\\s\\S]*?)(?:\\]\\]>)?<\\/${tag}>`, 'i');
+  const match = re.exec(xml);
+  return match?.[1]?.trim() ?? null;
+}
+
+function isCyberoamLikePortal(html: string): boolean {
+  const lower = html.toLowerCase();
+  return (
+    lower.includes('submitrequest()') &&
+    lower.includes('login.xml') &&
+    lower.includes('mode=191')
+  );
+}
+
+async function performCyberoamLogin(
+  baseUrl: string,
+  userId: string,
+  password: string,
+  signal?: AbortSignal
+): Promise<FirewallLoginResult | null> {
+  const action = new URL('login.xml', `${baseUrl}/`).toString();
+  let state: string | null = null;
+  const productType = Platform.OS === 'android' ? '2' : '0';
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const body = new URLSearchParams();
+    body.set('mode', '191');
+    body.set('username', userId);
+    body.set('password', password);
+    body.set('a', `${Date.now()}`);
+    body.set('producttype', productType);
+    if (state) body.set('state', state);
+
+    const res = await axios.post<string>(action, body.toString(), {
+      timeout: HTTP_TIMEOUT_MS,
+      maxRedirects: 5,
+      validateStatus: () => true,
+      signal,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      responseType: 'text',
+      transformResponse: (r) => r,
+    });
+
+    const xml = typeof res.data === 'string' ? res.data : String(res.data ?? '');
+    if (!xml.toLowerCase().includes('<requestresponse')) {
+      return null;
+    }
+    const status = readXmlTag(xml, 'status');
+    const message = readXmlTag(xml, 'message') ?? undefined;
+
+    if (status === CYBEROAM_LIVE) {
+      return { ok: true };
+    }
+    if (status === CYBEROAM_CHALLENGE) {
+      state = readXmlTag(xml, 'state');
+      if (state) continue;
+      return { ok: false, reason: 'unexpected_response', message, statusCode: res.status };
+    }
+    if (status === CYBEROAM_LOGGED_OUT) {
+      return { ok: false, reason: 'invalid_credentials', message, statusCode: res.status };
+    }
+
+    return { ok: false, reason: 'unexpected_response', message, statusCode: res.status };
+  }
+
+  return { ok: false, reason: 'unexpected_response', message: 'Login challenge could not be completed.' };
+}
+
 function guessSuccess(html: string, status: number): boolean {
   if (status >= 200 && status < 300) {
     const lower = html.toLowerCase();
@@ -109,6 +182,11 @@ export async function performFirewallLogin(opts: FirewallLoginOptions): Promise<
     let cookieHeader = '';
 
     try {
+      const directPortalResult = await performCyberoamLogin(base, opts.userId, opts.password, opts.signal);
+      if (directPortalResult) {
+        return directPortalResult;
+      }
+
       const getRes = await axios.get<string>(base, {
         timeout: HTTP_TIMEOUT_MS,
         maxRedirects: 5,
@@ -121,6 +199,11 @@ export async function performFirewallLogin(opts: FirewallLoginOptions): Promise<
       cookieHeader = mergeSetCookie(cookieHeader, getRes.headers['set-cookie']);
 
       const html = typeof getRes.data === 'string' ? getRes.data : String(getRes.data ?? '');
+      if (isCyberoamLikePortal(html)) {
+        const portalResult = await performCyberoamLogin(base, opts.userId, opts.password, opts.signal);
+        if (portalResult) return portalResult;
+      }
+
       const { action, method } = findFormAction(html, getRes.request?.responseURL ?? base);
       const hidden = extractInputs(html);
 

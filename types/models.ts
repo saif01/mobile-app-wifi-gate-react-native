@@ -11,10 +11,26 @@ export interface ActivityLogEntry {
 export interface AllowedWifiEntry {
   id: string;
   ssid: string;
-  /** Substring match on default gateway IP (e.g. "10.64.4.") */
-  gatewayMatch?: string;
+  ip?: string;
   remarks?: string;
-  active: boolean;
+  isActive: boolean;
+}
+
+export interface CurrentWifiInfo {
+  isConnected: boolean;
+  isWifi: boolean;
+  ssid?: string;
+  ip?: string;
+  gateway?: string;
+  permissionGranted: boolean;
+  canAskPermissionAgain: boolean;
+  permissionMessage?: string;
+}
+
+export interface SavedCredentials {
+  userId: string;
+  password: string;
+  lastLoginAt: string;
 }
 
 export interface NetworkSnapshot {
@@ -27,6 +43,13 @@ export interface NetworkSnapshot {
   gatewayIp: string | null;
   /** True when both WiFi and cellular may be active (Android dual transport). */
   cellularMayInterfere: boolean;
+}
+
+export interface WifiAccessEvaluation {
+  allowed: boolean;
+  noRestriction: boolean;
+  requiresWifiConnection: boolean;
+  match: AllowedWifiEntry | null;
 }
 
 export type FirewallLoginFailureReason =
