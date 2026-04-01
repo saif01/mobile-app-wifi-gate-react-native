@@ -388,13 +388,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.hero,
   },
   currentCard: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   currentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   metaLabel: {
     color: theme.colors.cyan,
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
   feedback: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   feedbackText: {
     color: theme.colors.text,
@@ -420,24 +420,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34, 60, 96, 0.4)',
   },
   ctaStack: {
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
   },
   itemCard: {
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   itemHeader: {
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   itemTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   itemIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 12,
     backgroundColor: 'rgba(86, 194, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -451,11 +451,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   remarks: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   actionRow: {
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.md,
   },
   actionButton: {
     width: '100%',
@@ -469,8 +469,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
   },
   detectedCard: {
-    marginBottom: theme.spacing.lg,
-    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    padding: 10,
   },
   modalActions: {
     flexDirection: 'row',

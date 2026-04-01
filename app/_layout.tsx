@@ -39,6 +39,7 @@ export default function RootLayout() {
         <Stack.Screen name="logs" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
         <Stack.Screen name="endpoint" options={{ title: 'Firewall Endpoint' }} />
+        <Stack.Screen name="about" options={{ title: 'About' }} />
         <Stack.Screen name="wifi" options={{ headerShown: false }} />
         <Stack.Screen name="biometric" options={{ title: 'Biometric Login' }} />
         <Stack.Screen name="webview-login" options={{ title: 'Browser Login', presentation: 'modal' }} />

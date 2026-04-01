@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Fingerprint, Globe, LockKeyhole, Shield, Wifi } from 'lucide-react-native';
+import { Fingerprint, Globe, Info, LockKeyhole, Shield, Wifi } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
@@ -24,7 +24,7 @@ export default function SettingsScreen() {
   const setBiometric = useAppStore((s) => s.setBiometric);
 
   const [hardwareAvailable, setHardwareAvailable] = useState(false);
-  const version = Constants.expoConfig?.version ?? '1.0.0';
+  const version = Constants.expoConfig?.version ?? '1.0.1';
 
   useEffect(() => {
     void (async () => {
@@ -170,6 +170,12 @@ export default function SettingsScreen() {
 
       <SectionHeader title="General" />
       <Card>
+        <ListItem
+          title="About"
+          subtitle="Version, app info, and features."
+          icon={Info}
+          onPress={() => router.push('/about')}
+        />
         <Body style={styles.versionText}>WiFiGate v{version}</Body>
         <Caption style={styles.versionCaption}>Captive portal access app.</Caption>
       </Card>
@@ -190,13 +196,13 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.hero,
   },
   summaryCard: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   summaryHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   summaryLabel: {
     color: theme.colors.cyan,
@@ -204,13 +210,13 @@ const styles = StyleSheet.create({
   },
   summaryText: {
     color: theme.colors.text,
-    marginTop: 6,
-    maxWidth: 250,
+    marginTop: 4,
+    maxWidth: 220,
   },
   versionText: {
     color: theme.colors.text,
     fontWeight: '700',
-    marginBottom: theme.spacing.sm,
+    marginBottom: 4,
   },
   versionCaption: {
     maxWidth: 320,

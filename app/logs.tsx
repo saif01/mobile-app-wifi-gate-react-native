@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.hero,
   },
   searchCard: {
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   searchRow: {
     flexDirection: 'row',
@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   chip: {
     borderRadius: theme.radius.pill,
@@ -202,29 +202,29 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   logCard: {
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   logRow: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   logIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     backgroundColor: 'rgba(86, 194, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   logBody: {
     flex: 1,
-    gap: theme.spacing.sm,
+    gap: 6,
   },
   logTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
   logMessage: {
     color: theme.colors.text,

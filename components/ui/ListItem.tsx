@@ -65,9 +65,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
     borderWidth: 1,
     borderColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    marginBottom: 6,
   },
   pressed: {
     opacity: 0.86,
@@ -85,19 +85,20 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   iconWrap: {
-    width: 38,
-    height: 38,
-    borderRadius: 14,
+    width: 34,
+    height: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(86, 194, 255, 0.1)',
   },
   textWrap: {
     flex: 1,
-    gap: 4,
+    gap: 2,
   },
   title: {
     color: theme.colors.text,
     fontWeight: '700',
+    lineHeight: 18,
   },
 });

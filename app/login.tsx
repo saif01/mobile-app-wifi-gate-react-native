@@ -371,7 +371,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
   },
   statusStrip: {
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   statusRow: {
     flexDirection: 'row',
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   formCard: {
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   formHeader: {
     flexDirection: 'row',
@@ -407,9 +407,9 @@ const styles = StyleSheet.create({
   endpointPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
     borderRadius: theme.radius.pill,
     backgroundColor: 'rgba(86, 194, 255, 0.08)',
     borderWidth: 1,
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
   },
   preferenceText: {
     flex: 1,
@@ -436,8 +436,8 @@ const styles = StyleSheet.create({
   },
   errorBox: {
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.lg,
-    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    padding: 10,
     borderRadius: theme.radius.md,
     backgroundColor: 'rgba(120, 23, 35, 0.38)',
     borderWidth: 1,
@@ -447,12 +447,12 @@ const styles = StyleSheet.create({
     color: '#ffd2d2',
   },
   secondaryAction: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
   },
   utilityRow: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
   },
   utilityButton: {
     flex: 1,

@@ -37,9 +37,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'flex-start',
-    gap: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    gap: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
     borderRadius: theme.radius.pill,
     borderWidth: 1,
   },
@@ -67,5 +67,7 @@ const styles = StyleSheet.create({
   label: {
     color: theme.colors.text,
     fontWeight: '700',
+    fontSize: 11,
+    lineHeight: 14,
   },
 });
