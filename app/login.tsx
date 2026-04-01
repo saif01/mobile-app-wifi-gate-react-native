@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { Fingerprint, KeyRound, LockKeyhole, Settings2, ShieldCheck, Wifi } from 'lucide-react-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { KeyboardAvoidingView, Platform, StyleSheet, Switch, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, StyleSheet, Switch, View } from 'react-native';
 import { z } from 'zod';
 
 import { PrimaryButton } from '@/components/ui/Button';
@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { InputField } from '@/components/ui/InputField';
 import { Screen } from '@/components/ui/Screen';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Body, Caption, Eyebrow, Subtitle, Title } from '@/components/ui/Typography';
+import { Body, Caption, Subtitle } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
 import { authenticateWithBiometrics, isBiometricAvailable } from '@/services/biometricService';
@@ -171,12 +171,9 @@ export default function LoginScreen() {
         <View style={styles.hero}>
           <View style={styles.logoShell}>
             <View style={styles.logoCore}>
-              <ShieldCheck color={theme.colors.white} size={30} strokeWidth={2.4} />
+              <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
             </View>
           </View>
-          <Eyebrow>Enterprise Access</Eyebrow>
-          <Title style={styles.title}>WiFiGate</Title>
-          <Subtitle style={styles.subtitle}>Secure WiFi login.</Subtitle>
         </View>
 
         <Card style={styles.statusStrip}>
@@ -191,7 +188,7 @@ export default function LoginScreen() {
                 networkTone === 'success'
                   ? 'Ready'
                   : networkTone === 'warning'
-                    ? 'Caution'
+                    ? 'Warn'
                     : networkTone === 'error'
                       ? 'Blocked'
                       : 'Checking'
@@ -340,7 +337,7 @@ const styles = StyleSheet.create({
   hero: {
     alignItems: 'center',
     marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
   },
   logoShell: {
     width: 88,
@@ -361,14 +358,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: theme.colors.primaryStrong,
   },
-  title: {
-    marginTop: theme.spacing.sm,
-    fontSize: theme.typography.hero,
-  },
-  subtitle: {
-    marginTop: 6,
-    textAlign: 'center',
-    paddingHorizontal: theme.spacing.md,
+  logoImage: {
+    width: 38,
+    height: 38,
   },
   statusStrip: {
     marginBottom: theme.spacing.md,
