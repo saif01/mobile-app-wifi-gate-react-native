@@ -120,8 +120,8 @@ export default function SettingsScreen() {
         />
         <ListItem title="Firewall Endpoint" subtitle={settings.firewallEndpoint} icon={Globe} onPress={() => router.push('/endpoint')} />
         <ListItem
-          title="Allowed WiFi List"
-          subtitle={`${settings.allowedWifi.filter((entry) => entry.isActive).length} active entries`}
+          title="WiFi lists"
+          subtitle={`${settings.allowedWifi.filter((entry) => entry.isActive).length} portal login · ${settings.noLoginWifi.filter((entry) => entry.isActive).length} no-portal`}
           icon={Wifi}
           onPress={() => router.push('/(tabs)/wifi')}
         />

@@ -71,6 +71,7 @@ export default function LoginScreen() {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [netHint, setNetHint] = useState<string | null>(null);
   const [networkTone, setNetworkTone] = useState<'success' | 'warning' | 'error' | 'neutral'>('neutral');
+  const [skipPortalNetwork, setSkipPortalNetwork] = useState(false);
   const loginAttemptGenerationRef = useRef(0);
 
   const { control, getValues, handleSubmit, reset } = useForm<FormValues>({
@@ -103,13 +104,21 @@ export default function LoginScreen() {
 
   useEffect(() => {
     void (async () => {
-      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      const gate = await fetchWifiLoginGate(settings.allowedWifi, settings.noLoginWifi);
       if (!gate.ok) {
+        setSkipPortalNetwork(false);
         setNetHint(gate.message);
         setNetworkTone('error');
         return;
       }
       const snap = gate.snapshot;
+      if (gate.access.skipPortalAuth) {
+        setSkipPortalNetwork(true);
+        setNetHint('This Wi‑Fi is on the no-portal list. Firewall sign-in and logout are not used here.');
+        setNetworkTone('success');
+        return;
+      }
+      setSkipPortalNetwork(false);
       if (gate.access.noRestriction) {
         setNetHint('Wi‑Fi connected. No allowlist — login is allowed on any Wi‑Fi.');
         setNetworkTone('warning');
@@ -123,7 +132,7 @@ export default function LoginScreen() {
       setNetHint('Allowed Wi‑Fi connected. You can sign in.');
       setNetworkTone('success');
     })();
-  }, [settings.allowedWifi, settings.warnCellularInterference]);
+  }, [settings.allowedWifi, settings.noLoginWifi, settings.warnCellularInterference]);
 
   const canUseBiometric = useMemo(
     () => bioAvailable && biometricEnabled && biometricCredentialsStored,
@@ -156,11 +165,18 @@ export default function LoginScreen() {
     setError(null);
     beginManualFirewallLoginScope();
     try {
-      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      const gate = await fetchWifiLoginGate(settings.allowedWifi, settings.noLoginWifi);
       if (attemptId !== loginAttemptGenerationRef.current) return;
       if (!gate.ok) {
         setError(gate.message);
         await appendActivityLog('warn', 'Login blocked: network gate', wifiLoginGateLogMeta(gate));
+        return;
+      }
+
+      if (gate.access.skipPortalAuth) {
+        await setAuthenticated(true, Date.now());
+        await appendActivityLog('info', 'Sign-in skipped: no-portal Wi‑Fi', wifiLoginGateLogMeta(gate));
+        router.replace('/(tabs)/home');
         return;
       }
 
@@ -227,11 +243,18 @@ export default function LoginScreen() {
     setBusy(true);
     beginManualFirewallLoginScope();
     try {
-      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      const gate = await fetchWifiLoginGate(settings.allowedWifi, settings.noLoginWifi);
       if (attemptId !== loginAttemptGenerationRef.current) return;
       if (!gate.ok) {
         setError(gate.message);
         await appendActivityLog('warn', 'Fingerprint login blocked: network gate', wifiLoginGateLogMeta(gate));
+        return;
+      }
+
+      if (gate.access.skipPortalAuth) {
+        await setAuthenticated(true, Date.now());
+        await appendActivityLog('info', 'Fingerprint skipped: no-portal Wi‑Fi', wifiLoginGateLogMeta(gate));
+        router.replace('/(tabs)/home');
         return;
       }
 
@@ -313,7 +336,7 @@ export default function LoginScreen() {
           <View style={styles.formTitleRow}>
             <View>
               <Caption style={styles.sectionEyebrow}>Session</Caption>
-              <Title style={styles.signInTitle}>Sign in</Title>
+              <Title style={styles.signInTitle}>{skipPortalNetwork ? 'No portal' : 'Sign in'}</Title>
             </View>
             <View style={styles.portalPill}>
               <Wifi color={theme.colors.cyan} size={13} strokeWidth={2.1} />
@@ -321,66 +344,82 @@ export default function LoginScreen() {
             </View>
           </View>
 
-          <Controller
-            control={control}
-            name="userId"
-            render={({ field, fieldState }) => (
-              <InputField
-                label="Login ID"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="Login ID"
-                icon={KeyRound}
-                error={fieldState.error?.message}
-                autoCapitalize="none"
-                autoCorrect={false}
+          {skipPortalNetwork ? (
+            <>
+              <Caption style={styles.helperText}>
+                You can open the app without firewall credentials on this network. Logout from the menu will not call the portal server here.
+              </Caption>
+              <PrimaryButton
+                title="Continue to app"
+                onPress={() => void setAuthenticated(true, Date.now()).then(() => router.replace('/(tabs)/home'))}
+                icon={ShieldCheck}
+                trailingArrow
               />
-            )}
-          />
-
-          <Controller
-            control={control}
-            name="password"
-            render={({ field, fieldState }) => (
-              <InputField
-                label="Password"
-                value={field.value}
-                onChangeText={field.onChange}
-                placeholder="Password"
-                icon={LockKeyhole}
-                error={fieldState.error?.message}
-                secureTextEntry={!showPass}
-                showToggle
-                onToggleSecure={() => setShowPass((v) => !v)}
-                autoCapitalize="none"
-                autoCorrect={false}
+            </>
+          ) : (
+            <>
+              <Controller
+                control={control}
+                name="userId"
+                render={({ field, fieldState }) => (
+                  <InputField
+                    label="Login ID"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="Login ID"
+                    icon={KeyRound}
+                    error={fieldState.error?.message}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                )}
               />
-            )}
-          />
 
-          {error ? (
-            <View style={styles.errorBox}>
-              <StatusBadge tone="error" label="Failed" />
-              <Body style={styles.errorText}>{error}</Body>
-            </View>
-          ) : null}
+              <Controller
+                control={control}
+                name="password"
+                render={({ field, fieldState }) => (
+                  <InputField
+                    label="Password"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                    placeholder="Password"
+                    icon={LockKeyhole}
+                    error={fieldState.error?.message}
+                    secureTextEntry={!showPass}
+                    showToggle
+                    onToggleSecure={() => setShowPass((v) => !v)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                )}
+              />
 
-          <PrimaryButton
-            title={busy ? 'Connecting...' : 'Sign in'}
-            onPress={onSubmit}
-            loading={busy}
-            disabled={busy}
-            icon={ShieldCheck}
-            trailingArrow
-          />
+              {error ? (
+                <View style={styles.errorBox}>
+                  <StatusBadge tone="error" label="Failed" />
+                  <Body style={styles.errorText}>{error}</Body>
+                </View>
+              ) : null}
 
-          {canUseBiometric ? (
-            <View style={styles.secondaryAction}>
-              <PrimaryButton title="Login with Fingerprint" variant="secondary" onPress={loginWithBiometricCredentials} disabled={busy} icon={Fingerprint} />
-            </View>
-          ) : manualLoginDone && bioAvailable && !biometricCredentialsStored ? (
-            <Caption style={styles.helperText}>Sign in with ID and password first to enable fingerprint.</Caption>
-          ) : null}
+              <PrimaryButton
+                title={busy ? 'Connecting...' : 'Sign in'}
+                onPress={onSubmit}
+                loading={busy}
+                disabled={busy}
+                icon={ShieldCheck}
+                trailingArrow
+              />
+
+              {canUseBiometric ? (
+                <View style={styles.secondaryAction}>
+                  <PrimaryButton title="Login with Fingerprint" variant="secondary" onPress={loginWithBiometricCredentials} disabled={busy} icon={Fingerprint} />
+                </View>
+              ) : manualLoginDone && bioAvailable && !biometricCredentialsStored ? (
+                <Caption style={styles.helperText}>Sign in with ID and password first to enable fingerprint.</Caption>
+              ) : null}
+            </>
+          )}
 
           <View style={styles.utilityRow}>
             <PrimaryButton title="Settings" variant="ghost" onPress={() => router.push('/(tabs)/settings')} icon={Settings2} style={styles.utilityButton} />

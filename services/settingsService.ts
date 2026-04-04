@@ -6,6 +6,8 @@ import type { AllowedWifiEntry } from '@/types/models';
 export interface AppSettings {
   firewallEndpoint: string;
   allowedWifi: AllowedWifiEntry[];
+  /** Networks without captive portal — app does not perform firewall login/logout on these. */
+  noLoginWifi: AllowedWifiEntry[];
   lastLoginId: string;
   /** Prefer WiFi path; warn when cellular may interfere */
   warnCellularInterference: boolean;
@@ -16,6 +18,7 @@ export interface AppSettings {
 const DEFAULTS: AppSettings = {
   firewallEndpoint: DEFAULT_FIREWALL_ENDPOINT,
   allowedWifi: [],
+  noLoginWifi: [],
   lastLoginId: '',
   warnCellularInterference: true,
   autoLoginEnabled: true,
@@ -81,16 +84,22 @@ export async function loadSettings(): Promise<AppSettings> {
           .map((entry) => normalizeAllowedWifiEntry(entry))
           .filter((entry): entry is AllowedWifiEntry => entry !== null)
       : [];
+    const noLoginWifi = Array.isArray(parsed.noLoginWifi)
+      ? parsed.noLoginWifi
+          .map((entry) => normalizeAllowedWifiEntry(entry))
+          .filter((entry): entry is AllowedWifiEntry => entry !== null)
+      : [];
     const next: AppSettings = {
       ...DEFAULTS,
       ...parsed,
       firewallEndpoint: canonicalizeFirewallEndpoint(parsed.firewallEndpoint),
       allowedWifi,
+      noLoginWifi,
       lastLoginId: typeof parsed.lastLoginId === 'string' ? parsed.lastLoginId : '',
       autoLoginEnabled: typeof parsed.autoLoginEnabled === 'boolean' ? parsed.autoLoginEnabled : DEFAULTS.autoLoginEnabled,
       lastLoginAt: typeof parsed.lastLoginAt === 'number' ? parsed.lastLoginAt : null,
     };
-    if (JSON.stringify(next) !== JSON.stringify({ ...DEFAULTS, ...parsed, allowedWifi })) {
+    if (JSON.stringify(next) !== JSON.stringify({ ...DEFAULTS, ...parsed, allowedWifi, noLoginWifi })) {
       await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS_V1, JSON.stringify(next));
     }
     return next;
@@ -108,6 +117,7 @@ export async function saveSettings(partial: Partial<AppSettings>): Promise<AppSe
       ? canonicalizeFirewallEndpoint(partial.firewallEndpoint)
       : current.firewallEndpoint,
     allowedWifi: partial.allowedWifi ?? current.allowedWifi,
+    noLoginWifi: partial.noLoginWifi ?? current.noLoginWifi,
   };
   await AsyncStorage.setItem(STORAGE_KEYS.SETTINGS_V1, JSON.stringify(next));
   return next;

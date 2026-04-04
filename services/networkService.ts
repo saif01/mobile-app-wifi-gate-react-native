@@ -183,15 +183,33 @@ export function matchAllowedWifi(
 
 export function evaluateWifiAccess(
   snapshot: NetworkSnapshot,
-  entries: AllowedWifiEntry[]
+  allowedWifi: AllowedWifiEntry[],
+  noLoginWifi: AllowedWifiEntry[] = []
 ): WifiAccessEvaluation {
-  const activeEntries = entries.filter((entry) => entry.isActive);
+  const noLoginActive = noLoginWifi.filter((entry) => entry.isActive);
+  if (noLoginActive.length > 0) {
+    const noLoginMatch = matchAllowedWifi(snapshot, noLoginActive);
+    if (noLoginMatch) {
+      return {
+        allowed: snapshot.isWifi && snapshot.isConnected,
+        noRestriction: false,
+        requiresWifiConnection: !snapshot.isWifi || !snapshot.isConnected,
+        match: null,
+        skipPortalAuth: true,
+        noLoginMatch,
+      };
+    }
+  }
+
+  const activeEntries = allowedWifi.filter((entry) => entry.isActive);
   if (activeEntries.length === 0) {
     return {
       allowed: snapshot.isWifi && snapshot.isConnected,
       noRestriction: true,
       requiresWifiConnection: !snapshot.isWifi || !snapshot.isConnected,
       match: null,
+      skipPortalAuth: false,
+      noLoginMatch: null,
     };
   }
 
@@ -201,5 +219,19 @@ export function evaluateWifiAccess(
     noRestriction: false,
     requiresWifiConnection: !snapshot.isWifi || !snapshot.isConnected,
     match,
+    skipPortalAuth: false,
+    noLoginMatch: null,
   };
+}
+
+/** Returns which list already contains the same SSID or IP as the candidate (if any). */
+export function findWifiListConflict(
+  candidate: Pick<AllowedWifiEntry, 'ssid' | 'ip'>,
+  allowedWifi: AllowedWifiEntry[],
+  noLoginWifi: AllowedWifiEntry[],
+  excludeId?: string
+): 'allowed' | 'noLogin' | null {
+  if (findDuplicateAllowedWifi(allowedWifi, candidate, excludeId)) return 'allowed';
+  if (findDuplicateAllowedWifi(noLoginWifi, candidate, excludeId)) return 'noLogin';
+  return null;
 }

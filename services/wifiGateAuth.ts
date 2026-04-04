@@ -5,7 +5,8 @@ import { evaluateWifiAccess, getNetworkSnapshot } from '@/services/networkServic
 /** User-facing copy aligned with product requirements */
 export const WIFI_GATE_MESSAGES = {
   notOnWifi: 'Not connected to WiFi.',
-  wifiNotAllowed: 'Current WiFi is not allowed for login. Add this network under Settings → Allowed Wi‑Fi.',
+  wifiNotAllowed:
+    'Current WiFi is not allowed for portal login. Add it under Wi‑Fi as login required, or as no-portal if it has no captive portal.',
 } as const;
 
 export type WifiLoginGateFailureCode = 'offline_or_no_wifi' | 'wifi_not_allowed';
@@ -26,9 +27,10 @@ export type WifiLoginGateResult =
  */
 export function evaluateWifiLoginGate(
   snapshot: NetworkSnapshot,
-  allowedWifi: AllowedWifiEntry[]
+  allowedWifi: AllowedWifiEntry[],
+  noLoginWifi: AllowedWifiEntry[] = []
 ): WifiLoginGateResult {
-  const access = evaluateWifiAccess(snapshot, allowedWifi);
+  const access = evaluateWifiAccess(snapshot, allowedWifi, noLoginWifi);
 
   if (!snapshot.isConnected || !snapshot.isWifi) {
     return {
@@ -53,9 +55,12 @@ export function evaluateWifiLoginGate(
   return { ok: true, snapshot, access };
 }
 
-export async function fetchWifiLoginGate(allowedWifi: AllowedWifiEntry[]): Promise<WifiLoginGateResult> {
+export async function fetchWifiLoginGate(
+  allowedWifi: AllowedWifiEntry[],
+  noLoginWifi: AllowedWifiEntry[] = []
+): Promise<WifiLoginGateResult> {
   const snapshot = await getNetworkSnapshot();
-  return evaluateWifiLoginGate(snapshot, allowedWifi);
+  return evaluateWifiLoginGate(snapshot, allowedWifi, noLoginWifi);
 }
 
 export function wifiLoginGateLogMeta(gate: WifiLoginGateResult): Record<string, string | number | boolean | undefined> {
@@ -68,5 +73,6 @@ export function wifiLoginGateLogMeta(gate: WifiLoginGateResult): Record<string, 
     ssid: gate.snapshot.ssid ?? '',
     gateway: gate.snapshot.gatewayIp ?? '',
     noRestriction: gate.access.noRestriction,
+    skipPortalAuth: gate.access.skipPortalAuth,
   };
 }

@@ -16,7 +16,7 @@ import { useAppStore } from '@/store/appStore';
 async function syncAuthAgent(reason: string) {
   const store = useAppStore.getState();
   const snapshot = await getNetworkSnapshot();
-  const gate = evaluateWifiLoginGate(snapshot, store.settings.allowedWifi);
+  const gate = evaluateWifiLoginGate(snapshot, store.settings.allowedWifi, store.settings.noLoginWifi);
   const checkedAt = Date.now();
 
   if (!gate.ok) {
@@ -39,7 +39,21 @@ async function syncAuthAgent(reason: string) {
   }
 
   const { access } = gate;
-  const targetSsid = access.match?.ssid || gate.snapshot.ssid || null;
+  const targetSsid = access.noLoginMatch?.ssid || access.match?.ssid || gate.snapshot.ssid || null;
+
+  if (access.skipPortalAuth) {
+    if (!store.isAuthenticated) {
+      await store.setAuthenticated(true, Date.now());
+    }
+    store.updateAuthAgent({
+      status: 'authenticated',
+      message: 'This Wi‑Fi does not use captive portal login.',
+      targetSsid,
+      lastCheckedAt: checkedAt,
+      lastError: undefined,
+    });
+    return;
+  }
 
   if (!store.settings.autoLoginEnabled) {
     store.updateAuthAgent({

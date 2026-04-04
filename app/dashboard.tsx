@@ -72,8 +72,8 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const access = useMemo(
-    () => (snap ? evaluateWifiAccess(snap, settings.allowedWifi) : null),
-    [settings.allowedWifi, snap]
+    () => (snap ? evaluateWifiAccess(snap, settings.allowedWifi, settings.noLoginWifi) : null),
+    [settings.allowedWifi, settings.noLoginWifi, snap]
   );
 
   const refresh = useCallback(async () => {
@@ -113,11 +113,13 @@ export default function DashboardScreen() {
 
   const accessTone: 'success' | 'error' | 'warning' | 'neutral' = !access
     ? 'neutral'
-    : access.match
+    : access.skipPortalAuth
       ? 'success'
-      : access.noRestriction
-        ? 'warning'
-        : 'error';
+      : access.match
+        ? 'success'
+        : access.noRestriction
+          ? 'warning'
+          : 'error';
 
   const sessionTone: 'success' | 'error' = isAuthenticated ? 'success' : 'error';
   const lastStr = lastLoginAt ? new Date(lastLoginAt).toLocaleString() : '—';
@@ -179,12 +181,22 @@ export default function DashboardScreen() {
             <StatBlock
               title="Access"
               value={
-                access?.match ? 'OK' : access?.noRestriction ? 'Open' : access ? 'Denied' : '…'
+                access?.skipPortalAuth
+                  ? 'No portal'
+                  : access?.match
+                    ? 'OK'
+                    : access?.noRestriction
+                      ? 'Open'
+                      : access
+                        ? 'Denied'
+                        : '…'
               }
               subtitle={
-                access?.match
-                  ? `${access.match.ssid || access.match.ip}`
-                  : `${settings.allowedWifi.filter((e) => e.isActive).length} allowed`
+                access?.skipPortalAuth
+                  ? `${access.noLoginMatch?.ssid || access.noLoginMatch?.ip || 'Wi‑Fi without login'}`
+                  : access?.match
+                    ? `${access.match.ssid || access.match.ip}`
+                    : `${settings.allowedWifi.filter((e) => e.isActive).length} login · ${settings.noLoginWifi.filter((e) => e.isActive).length} no-portal`
               }
               tone={accessTone}
               icon={ShieldCheck}

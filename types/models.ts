@@ -66,7 +66,11 @@ export interface WifiAccessEvaluation {
   allowed: boolean;
   noRestriction: boolean;
   requiresWifiConnection: boolean;
+  /** Matched entry from the allowed (portal login) list. */
   match: AllowedWifiEntry | null;
+  /** Current network is on the no-portal list — skip captive portal login and server logout. */
+  skipPortalAuth: boolean;
+  noLoginMatch: AllowedWifiEntry | null;
 }
 
 export type FirewallLoginFailureReason =

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 
 import { DEFAULT_FIREWALL_ENDPOINT } from '@/constants/defaults';
 import { performFirewallLogout } from '@/services/firewallLogin';
+import { evaluateWifiAccess, getNetworkSnapshot } from '@/services/networkService';
 import { loadSettings, saveLastLoginId, saveSettings, type AppSettings } from '@/services/settingsService';
 import {
   getSavedCredentials,
@@ -60,6 +61,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settings: {
     firewallEndpoint: DEFAULT_FIREWALL_ENDPOINT,
     allowedWifi: [],
+    noLoginWifi: [],
     lastLoginId: '',
     warnCellularInterference: true,
     autoLoginEnabled: true,
@@ -215,7 +217,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const { settings, lastLoginId } = get();
     const saved = await getSavedCredentials();
     const portalUser = (saved?.userId ?? lastLoginId)?.trim() || undefined;
-    await performFirewallLogout(settings.firewallEndpoint, portalUser).catch(() => {});
+    const snapshot = await getNetworkSnapshot();
+    const access = evaluateWifiAccess(snapshot, settings.allowedWifi, settings.noLoginWifi);
+    if (!access.skipPortalAuth) {
+      await performFirewallLogout(settings.firewallEndpoint, portalUser).catch(() => {});
+    }
 
     await setSessionAuthenticated(false);
     const next = await saveSettings({ lastLoginAt: null });

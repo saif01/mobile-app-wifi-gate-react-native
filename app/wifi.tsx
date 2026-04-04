@@ -1,7 +1,7 @@
 import { useFocusEffect } from '@react-navigation/native';
 import { Pencil, Plus, ShieldCheck, Trash2, Wifi, WifiOff } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, SectionList, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/ui/Button';
 import { AppModal } from '@/components/ui/AppModal';
@@ -16,6 +16,7 @@ import { appendActivityLog } from '@/services/activityLog';
 import {
   evaluateWifiAccess,
   findDuplicateAllowedWifi,
+  findWifiListConflict,
   getCurrentWifiInfo,
   getNetworkSnapshot,
 } from '@/services/networkService';
@@ -27,23 +28,46 @@ type FeedbackState = {
   message: string;
 } | null;
 
+type WifiListKind = 'allowed' | 'noLogin';
+
 type ModalState = {
   visible: boolean;
   mode: 'create' | 'edit';
   source: 'manual' | 'detected';
+  listKind: WifiListKind;
   entryId?: string;
   originalSsid?: string;
   originalIp?: string;
 };
 
+type SectionRow = { listKind: WifiListKind; entry: AllowedWifiEntry };
+
 function newId() {
   return `wf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function listSettingsKey(kind: WifiListKind): 'allowedWifi' | 'noLoginWifi' {
+  return kind === 'allowed' ? 'allowedWifi' : 'noLoginWifi';
 }
 
 export default function WifiScreen() {
   const settings = useAppStore((s) => s.settings);
   const setSettings = useAppStore((s) => s.setSettings);
-  const list = useMemo(() => settings.allowedWifi, [settings.allowedWifi]);
+
+  const sections = useMemo(
+    () =>
+      [
+        {
+          title: 'No portal (no login/logout)',
+          data: settings.noLoginWifi.map((entry) => ({ listKind: 'noLogin' as const, entry })),
+        },
+        {
+          title: 'Portal login required',
+          data: settings.allowedWifi.map((entry) => ({ listKind: 'allowed' as const, entry })),
+        },
+      ] as { title: string; data: SectionRow[] }[],
+    [settings.allowedWifi, settings.noLoginWifi]
+  );
 
   const [snapshot, setSnapshot] = useState<NetworkSnapshot | null>(null);
   const [ssid, setSsid] = useState('');
@@ -56,11 +80,13 @@ export default function WifiScreen() {
     visible: false,
     mode: 'create',
     source: 'manual',
+    listKind: 'allowed',
   });
 
   const access = useMemo(
-    () => (snapshot ? evaluateWifiAccess(snapshot, settings.allowedWifi) : null),
-    [settings.allowedWifi, snapshot]
+    () =>
+      snapshot ? evaluateWifiAccess(snapshot, settings.allowedWifi, settings.noLoginWifi) : null,
+    [settings.allowedWifi, settings.noLoginWifi, snapshot]
   );
 
   useFocusEffect(
@@ -77,13 +103,13 @@ export default function WifiScreen() {
     setRemarks('');
   }
 
-  function openManualAdd() {
+  function openManualAdd(listKind: WifiListKind) {
     resetForm();
     setFeedback(null);
-    setModal({ visible: true, mode: 'create', source: 'manual' });
+    setModal({ visible: true, mode: 'create', source: 'manual', listKind });
   }
 
-  function openEdit(entry: AllowedWifiEntry) {
+  function openEdit(entry: AllowedWifiEntry, listKind: WifiListKind) {
     setFeedback(null);
     setSsid(entry.ssid);
     setIp(entry.ip ?? '');
@@ -92,6 +118,7 @@ export default function WifiScreen() {
       visible: true,
       mode: 'edit',
       source: 'manual',
+      listKind,
       entryId: entry.id,
       originalSsid: entry.ssid,
       originalIp: entry.ip,
@@ -103,7 +130,7 @@ export default function WifiScreen() {
     resetForm();
   }
 
-  async function openQuickAdd() {
+  async function openQuickAdd(listKind: WifiListKind) {
     setDetecting(true);
     setFeedback(null);
     try {
@@ -122,12 +149,20 @@ export default function WifiScreen() {
         return;
       }
 
-      const duplicate = findDuplicateAllowedWifi(settings.allowedWifi, {
-        ssid: info.ssid ?? '',
-        ip: identifier,
-      });
-      if (duplicate) {
-        setFeedback({ kind: 'info', message: 'This WiFi network is already in the allowed list.' });
+      const conflict = findWifiListConflict(
+        { ssid: info.ssid ?? '', ip: identifier },
+        settings.allowedWifi,
+        settings.noLoginWifi
+      );
+      if (conflict) {
+        if (conflict === listKind) {
+          setFeedback({ kind: 'info', message: 'This WiFi network is already in this list.' });
+        } else {
+          setFeedback({
+            kind: 'info',
+            message: `This network is already in the ${conflict === 'allowed' ? 'portal login' : 'no-portal'} list.`,
+          });
+        }
         return;
       }
 
@@ -138,6 +173,7 @@ export default function WifiScreen() {
         visible: true,
         mode: 'create',
         source: 'detected',
+        listKind,
         originalSsid: info.ssid,
         originalIp: identifier,
       });
@@ -161,26 +197,41 @@ export default function WifiScreen() {
       return;
     }
 
-    const duplicate = findDuplicateAllowedWifi(
-      settings.allowedWifi,
+    const key = listSettingsKey(modal.listKind);
+    const currentList = settings[key];
+    const otherKey = listSettingsKey(modal.listKind === 'allowed' ? 'noLogin' : 'allowed');
+    const otherList = settings[otherKey];
+
+    const dupOther = findDuplicateAllowedWifi(otherList, { ssid: nextSsid, ip: nextIp || undefined });
+    if (dupOther) {
+      setFeedback({
+        kind: 'error',
+        message: `This network is already in the ${modal.listKind === 'allowed' ? 'no-portal' : 'portal login'} list.`,
+      });
+      return;
+    }
+
+    const dupSame = findDuplicateAllowedWifi(
+      currentList,
       { ssid: nextSsid, ip: nextIp || undefined },
       modal.mode === 'edit' ? modal.entryId : undefined
     );
-    if (duplicate) {
-      setFeedback({ kind: 'error', message: 'This WiFi network is already in the allowed list.' });
+    if (dupSame) {
+      setFeedback({ kind: 'error', message: 'This WiFi network is already in this list.' });
       return;
     }
 
     setSaving(true);
     try {
       if (modal.mode === 'edit' && modal.entryId) {
-        const allowedWifi = settings.allowedWifi.map((entry) =>
+        const updated = currentList.map((entry) =>
           entry.id === modal.entryId
             ? { ...entry, ssid: nextSsid, ip: nextIp || undefined, remarks: nextRemarks || undefined }
             : entry
         );
-        await setSettings({ allowedWifi });
-        await appendActivityLog('info', 'Allowed WiFi entry updated', { id: modal.entryId });
+        await setSettings({ [key]: updated });
+        const label = modal.listKind === 'allowed' ? 'Allowed WiFi entry updated' : 'No-portal WiFi entry updated';
+        await appendActivityLog('info', label, { id: modal.entryId });
         setFeedback({ kind: 'success', message: 'WiFi entry updated successfully.' });
       } else {
         const next: AllowedWifiEntry = {
@@ -190,9 +241,10 @@ export default function WifiScreen() {
           remarks: nextRemarks || undefined,
           isActive: true,
         };
-        await setSettings({ allowedWifi: [...settings.allowedWifi, next] });
-        await appendActivityLog('success', 'Allowed WiFi entry added', { id: next.id });
-        setFeedback({ kind: 'success', message: 'WiFi added to allowed list successfully.' });
+        await setSettings({ [key]: [...currentList, next] });
+        const label = modal.listKind === 'allowed' ? 'Allowed WiFi entry added' : 'No-portal WiFi entry added';
+        await appendActivityLog('success', label, { id: next.id });
+        setFeedback({ kind: 'success', message: 'WiFi entry saved successfully.' });
       }
       closeModal();
       setSnapshot(await getNetworkSnapshot());
@@ -201,34 +253,55 @@ export default function WifiScreen() {
     }
   }
 
-  async function toggleActive(id: string, isActive: boolean) {
-    const allowedWifi = settings.allowedWifi.map((entry) => (entry.id === id ? { ...entry, isActive } : entry));
-    await setSettings({ allowedWifi });
-    await appendActivityLog('info', 'Allowed WiFi entry toggled', { id, isActive });
+  async function toggleActive(listKind: WifiListKind, id: string, isActive: boolean) {
+    const key = listSettingsKey(listKind);
+    const list = settings[key].map((entry) => (entry.id === id ? { ...entry, isActive } : entry));
+    await setSettings({ [key]: list });
+    await appendActivityLog('info', 'WiFi entry toggled', { id, isActive, list: key });
     setSnapshot(await getNetworkSnapshot());
   }
 
-  async function remove(id: string) {
-    const allowedWifi = settings.allowedWifi.filter((entry) => entry.id !== id);
-    await setSettings({ allowedWifi });
-    await appendActivityLog('warn', 'Allowed WiFi entry removed', { id });
+  async function remove(listKind: WifiListKind, id: string) {
+    const key = listSettingsKey(listKind);
+    const list = settings[key].filter((entry) => entry.id !== id);
+    await setSettings({ [key]: list });
+    await appendActivityLog('warn', 'WiFi entry removed', { id, list: key });
     setFeedback({ kind: 'success', message: 'WiFi entry deleted successfully.' });
     setSnapshot(await getNetworkSnapshot());
   }
 
+  const currentBadge = !snapshot?.isWifi
+    ? { tone: 'neutral' as const, label: 'Offline' }
+    : access?.skipPortalAuth
+      ? { tone: 'success' as const, label: 'No portal' }
+      : access?.match
+        ? { tone: 'success' as const, label: 'Authorized' }
+        : access?.noRestriction
+          ? { tone: 'warning' as const, label: 'Open mode' }
+          : { tone: 'error' as const, label: 'Blocked' };
+
   return (
     <Screen contentStyle={styles.content}>
-      <FlatList
-        data={list}
-        keyExtractor={(item) => item.id}
+      <SectionList
+        sections={sections}
+        keyExtractor={(item) => `${item.listKind}-${item.entry.id}`}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section: { title } }) => <SectionHeader title={title} />}
+        renderSectionFooter={({ section }) =>
+          section.data.length === 0 ? (
+            <Card style={styles.emptySectionCard}>
+              <Caption>No entries yet.</Caption>
+            </Card>
+          ) : null
+        }
         ListHeaderComponent={
           <>
             <View style={styles.hero}>
               <Eyebrow>Network Policy</Eyebrow>
               <Title style={styles.title}>WiFi access</Title>
-              <Subtitle>Manage allowed networks.</Subtitle>
+              <Subtitle>No-portal networks skip firewall login and server logout. Portal lists keep the previous behavior.</Subtitle>
             </View>
 
             <Card style={styles.currentCard}>
@@ -239,10 +312,7 @@ export default function WifiScreen() {
                     {snapshot?.isWifi ? snapshot.ssid || 'WiFi connected' : 'No active WiFi'}
                   </Body>
                 </View>
-                <StatusBadge
-                  tone={access?.match ? 'success' : access?.noRestriction ? 'warning' : snapshot?.isWifi ? 'error' : 'neutral'}
-                  label={access?.match ? 'Authorized' : access?.noRestriction ? 'Open Mode' : snapshot?.isWifi ? 'Blocked' : 'Offline'}
-                />
+                <StatusBadge tone={currentBadge.tone} label={currentBadge.label} />
               </View>
               <Caption>{snapshot?.gatewayIp ? `Gateway ${snapshot.gatewayIp}` : 'Connect to WiFi.'}</Caption>
             </Card>
@@ -263,17 +333,25 @@ export default function WifiScreen() {
 
             <View style={styles.ctaStack}>
               <PrimaryButton
-                title="Add Current WiFi"
-                onPress={openQuickAdd}
+                title="Add current — portal login"
+                onPress={() => void openQuickAdd('allowed')}
                 loading={detecting}
                 disabled={detecting}
                 icon={Plus}
                 trailingArrow
               />
-              <PrimaryButton title="Add Manually" onPress={openManualAdd} variant="secondary" icon={Wifi} />
+              <PrimaryButton
+                title="Add current — no portal"
+                onPress={() => void openQuickAdd('noLogin')}
+                loading={detecting}
+                disabled={detecting}
+                variant="secondary"
+                icon={Wifi}
+                trailingArrow
+              />
+              <PrimaryButton title="Add manually — portal" onPress={() => openManualAdd('allowed')} variant="secondary" icon={ShieldCheck} />
+              <PrimaryButton title="Add manually — no portal" onPress={() => openManualAdd('noLogin')} variant="ghost" icon={WifiOff} />
             </View>
-
-            <SectionHeader title="Allowed WiFi" />
           </>
         }
         renderItem={({ item }) => (
@@ -281,40 +359,43 @@ export default function WifiScreen() {
             <View style={styles.itemHeader}>
               <View style={styles.itemTop}>
                 <View style={styles.itemIcon}>
-                  {item.isActive ? (
+                  {item.entry.isActive ? (
                     <Wifi color={theme.colors.primary} size={18} strokeWidth={2.2} />
                   ) : (
                     <WifiOff color={theme.colors.textSoft} size={18} strokeWidth={2.2} />
                   )}
                 </View>
                 <View style={styles.itemText}>
-                  <Body style={styles.itemTitle}>{item.ssid || 'Unnamed WiFi entry'}</Body>
-                  <Caption>{item.ip ? `Identifier ${item.ip}` : 'Identifier not set'}</Caption>
+                  <Body style={styles.itemTitle}>{item.entry.ssid || 'Unnamed WiFi entry'}</Body>
+                  <Caption>{item.entry.ip ? `Identifier ${item.entry.ip}` : 'Identifier not set'}</Caption>
                 </View>
               </View>
-              <StatusBadge tone={item.isActive ? 'success' : 'neutral'} label={item.isActive ? 'Active' : 'Paused'} />
+              <View style={styles.itemBadges}>
+                <StatusBadge tone="neutral" label={item.listKind === 'noLogin' ? 'No portal' : 'Portal'} />
+                <StatusBadge tone={item.entry.isActive ? 'success' : 'neutral'} label={item.entry.isActive ? 'Active' : 'Paused'} />
+              </View>
             </View>
 
-            {item.remarks ? <Caption style={styles.remarks}>{item.remarks}</Caption> : null}
+            {item.entry.remarks ? <Caption style={styles.remarks}>{item.entry.remarks}</Caption> : null}
 
             <View style={styles.actionRow}>
               <PrimaryButton
-                title={item.isActive ? 'Pause' : 'Activate'}
-                onPress={() => void toggleActive(item.id, !item.isActive)}
+                title={item.entry.isActive ? 'Pause' : 'Activate'}
+                onPress={() => void toggleActive(item.listKind, item.entry.id, !item.entry.isActive)}
                 variant="ghost"
                 icon={ShieldCheck}
                 style={styles.actionButton}
               />
               <PrimaryButton
                 title="Edit"
-                onPress={() => openEdit(item)}
+                onPress={() => openEdit(item.entry, item.listKind)}
                 variant="secondary"
                 icon={Pencil}
                 style={styles.actionButton}
               />
               <PrimaryButton
                 title="Delete"
-                onPress={() => void remove(item.id)}
+                onPress={() => void remove(item.listKind, item.entry.id)}
                 variant="danger"
                 icon={Trash2}
                 style={styles.actionButton}
@@ -322,18 +403,20 @@ export default function WifiScreen() {
             </View>
           </Card>
         )}
-        ListEmptyComponent={
-          <Card style={styles.emptyCard}>
-            <Body style={styles.emptyTitle}>No WiFi entries yet</Body>
-            <Caption>Add current WiFi or create one manually.</Caption>
-          </Card>
-        }
       />
 
       <AppModal
         visible={modal.visible}
         title={modal.mode === 'edit' ? 'Edit WiFi Entry' : 'Add WiFi Entry'}
-        subtitle={modal.source === 'detected' ? 'Review before save.' : 'Enter WiFi details.'}
+        subtitle={
+          modal.listKind === 'noLogin'
+            ? modal.source === 'detected'
+              ? 'No portal — review before save.'
+              : 'No portal — enter WiFi details.'
+            : modal.source === 'detected'
+              ? 'Portal login — review before save.'
+              : 'Portal login — enter WiFi details.'
+        }
         onClose={closeModal}>
         {modal.source === 'detected' ? (
           <Card style={styles.detectedCard}>
@@ -422,6 +505,10 @@ const styles = StyleSheet.create({
   ctaStack: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  emptySectionCard: {
+    marginBottom: theme.spacing.sm,
   },
   itemCard: {
     marginBottom: theme.spacing.sm,
@@ -450,6 +537,12 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: '700',
   },
+  itemBadges: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    alignItems: 'center',
+  },
   remarks: {
     marginTop: theme.spacing.sm,
   },
@@ -459,14 +552,6 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     width: '100%',
-  },
-  emptyCard: {
-    marginTop: theme.spacing.sm,
-  },
-  emptyTitle: {
-    color: theme.colors.text,
-    fontWeight: '700',
-    marginBottom: theme.spacing.sm,
   },
   detectedCard: {
     marginBottom: theme.spacing.md,
