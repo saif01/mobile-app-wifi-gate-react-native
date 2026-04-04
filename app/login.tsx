@@ -54,7 +54,7 @@ function shouldOfferPortalFallback(reason?: string): boolean {
 }
 
 export default function LoginScreen() {
-  const appVersion = Constants.expoConfig?.version ?? '1.0.1';
+  const appVersion = Constants.expoConfig?.version ?? '1.0.2';
   const insets = useSafeAreaInsets();
   const settings = useAppStore((s) => s.settings);
   const lastLoginId = useAppStore((s) => s.lastLoginId);

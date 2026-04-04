@@ -39,7 +39,7 @@ function LinkRow({ label, value, href }: { label: string; value: string; href: s
 }
 
 export default function AboutScreen() {
-  const version = Constants.expoConfig?.version ?? '1.0.1';
+  const version = Constants.expoConfig?.version ?? '1.0.2';
 
   return (
     <Screen scroll contentStyle={styles.content}>
