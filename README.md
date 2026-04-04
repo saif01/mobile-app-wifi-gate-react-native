@@ -21,7 +21,7 @@ The original product specification is in [`docs/srs.text`](docs/srs.text).
 | **Logout** | **Logout** calls the portal **`logout.xml`** (e.g. Sophos `mode=193`) when possible **and** the current network is **not** on the no-portal list; then clears the **in-app session** flag and last-login time. **Saved credentials are not removed** so auto-login can run again after the next successful portal sign-in. |
 | **Biometrics** | After at least one successful manual login, user can enable **Fingerprint Login** in Settings; Session screen can sign in via biometrics + stored credentials. |
 | **Settings** | Firewall endpoint editor, **Wi‑Fi lists** (portal allowlist + no-portal list), **Auto Login Agent**, **Warn about mobile data**, biometric toggle, link to **About**. |
-| **Dashboard (Home)** | Wi‑Fi/access/session overview, **saved credentials** / **auto-login** status, reconnect, **Web Portal**, logout. |
+| **Dashboard (Home)** | Wi‑Fi/access/session overview, **credentials** / **auto-login** chips, **last login**, refresh, reconnect, **Web Portal**, logout. |
 | **Activity logs** | Local **append-only style** log (info/warn/error/success) with a cap (see `constants/defaults.ts`). |
 | **About** | In-app version, capability summary, company/support links (`app/about.tsx`). |
 
