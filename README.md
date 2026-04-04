@@ -57,6 +57,60 @@ npm start         # Metro only
 
 ---
 
+## Publish & build with Expo (EAS)
+
+The project includes [`eas.json`](eas.json) with **development**, **preview** (internal APK), and **production** (Android App Bundle) profiles. Uploading happens on **Expo’s servers** when you run **EAS Build** (and optionally **EAS Submit** for the stores).
+
+### One-time setup
+
+1. Create an account at [expo.dev](https://expo.dev) if you don’t have one.
+2. In the project folder:
+
+   ```bash
+   npx eas-cli@latest login
+   npx eas-cli@latest init
+   ```
+
+   `eas init` links the app to your Expo account and adds `"extra": { "eas": { "projectId": "…" } }` to `app.json` (merge carefully if you already use `extra`).
+
+3. If the slug **`WiFiGate`** is taken globally, change `expo.slug` in `app.json` to something unique (e.g. `wifigate-yourorg`).
+
+### Build in the cloud (uploads your project to Expo)
+
+```bash
+# Shareable APK for testing (internal distribution)
+npx eas-cli@latest build --platform android --profile preview
+
+# Play Store–ready AAB
+npx eas-cli@latest build --platform android --profile production
+
+# iOS (requires Apple Developer account + credentials setup)
+npx eas-cli@latest build --platform ios --profile production
+```
+
+Follow the CLI prompts; builds appear on [expo.dev](https://expo.dev) under your project → **Builds**. Download the artifact or install via the link EAS provides.
+
+### Store submission (optional)
+
+After a successful production build:
+
+```bash
+npx eas-cli@latest submit --platform android
+npx eas-cli@latest submit --platform ios
+```
+
+Configure Play Console / App Store Connect credentials when prompted.
+
+### Over-the-air updates (optional)
+
+With EAS Update configured for the project:
+
+```bash
+npx eas-cli@latest update --branch production --message "Describe change"
+```
+
+---
+
 ## Navigation overview
 
 - **Splash** (`app/index.tsx`) → **Tabs** main UI or legacy stack routes as configured.

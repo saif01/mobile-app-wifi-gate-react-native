@@ -33,7 +33,9 @@
         "USE_BIOMETRIC",
         "USE_FINGERPRINT",
         "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT"
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ],
       "package": "com.syful01.WiFiGate"
     },
@@ -60,6 +62,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6e17c2fa-d000-4c37-a0af-df1d90cd19ac"
+      }
+    },
+    "owner": "syful01"
   }
 }
