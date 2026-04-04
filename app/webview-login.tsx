@@ -1,13 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Alert, StyleSheet, View } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { Globe, MonitorSmartphone } from 'lucide-react-native';
 import { router } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { Card } from '@/components/ui/Card';
-import { Screen } from '@/components/ui/Screen';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Body, Caption, Eyebrow, Subtitle, Title } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
 import { resolvePortalEntryUrl } from '@/services/firewallLogin';
@@ -23,9 +19,6 @@ export default function WebViewLoginScreen() {
   const attemptedRef = useRef(false);
   const successRef = useRef(false);
   const rejectedRef = useRef(false);
-  const [portalState, setPortalState] = useState<'idle' | 'waiting' | 'signed_in' | 'rejected'>(
-    pendingPortalLogin ? 'waiting' : 'idle'
-  );
 
   useEffect(() => {
     return () => {
@@ -35,9 +28,7 @@ export default function WebViewLoginScreen() {
 
   const injectedJavaScript = useMemo(() => {
     if (!pendingPortalLogin) {
-      return `
-        true;
-      `;
+      return `true;`;
     }
 
     const userId = JSON.stringify(pendingPortalLogin.userId);
@@ -115,115 +106,46 @@ export default function WebViewLoginScreen() {
         state?: string;
         statusText?: string;
         captionText?: string;
-        message?: string;
       };
 
-      if (payload.type === 'portal-error') {
-        return;
-      }
-
+      if (payload.type === 'portal-error') return;
       if (payload.type !== 'portal-state') return;
       attemptedRef.current = true;
 
-      if (payload.state === 'waiting') {
-        setPortalState('waiting');
-        return;
-      }
       if (payload.state === 'signed_in') {
-        setPortalState('signed_in');
         void handlePortalSuccess();
         return;
       }
       if (payload.state === 'rejected') {
-        setPortalState('rejected');
         handlePortalRejected(payload.statusText || payload.captionText);
-        return;
       }
-      setPortalState('idle');
     } catch {
       // Ignore malformed messages from the page.
     }
   }
 
   return (
-    <Screen contentStyle={styles.content}>
-      <View style={styles.header}>
-        <Eyebrow>Fallback Flow</Eyebrow>
-        <Title style={styles.title}>Browser Login</Title>
-        <Subtitle>{pendingPortalLogin ? 'Completing sign-in through the portal.' : 'Use this if direct login fails.'}</Subtitle>
-      </View>
-
-      <Card style={styles.infoCard}>
-        <View style={styles.infoHeader}>
-          <View style={styles.iconWrap}>
-            <MonitorSmartphone color={theme.colors.primary} size={18} strokeWidth={2.2} />
-          </View>
-          <StatusBadge
-            tone={portalState === 'signed_in' ? 'success' : portalState === 'rejected' ? 'error' : 'warning'}
-            label={portalState === 'signed_in' ? 'Connected' : portalState === 'rejected' ? 'Failed' : pendingPortalLogin ? 'Auto Flow' : 'Manual Flow'}
-          />
-        </View>
-        <Body style={styles.infoText}>
-          {pendingPortalLogin ? 'WiFiGate is using the portal page to complete sign-in.' : 'Complete login in the portal.'}
-        </Body>
-        <View style={styles.endpointRow}>
-          <Globe color={theme.colors.textMuted} size={16} strokeWidth={2.1} />
-          <Caption>{uri}</Caption>
-        </View>
-      </Card>
-
+    <SafeAreaView style={styles.safe} edges={['bottom', 'left', 'right']}>
       <View style={styles.webShell}>
-        <WebView source={{ uri }} style={styles.web} injectedJavaScript={injectedJavaScript} onMessage={onMessage} />
+        <WebView
+          source={{ uri }}
+          style={styles.web}
+          injectedJavaScript={injectedJavaScript}
+          onMessage={onMessage}
+          contentInsetAdjustmentBehavior="never"
+        />
       </View>
-    </Screen>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.xl,
-  },
-  header: {
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  title: {
-    fontSize: theme.typography.hero,
-  },
-  infoCard: {
-    marginBottom: theme.spacing.lg,
-  },
-  infoHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: theme.spacing.md,
-  },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(86, 194, 255, 0.1)',
-  },
-  infoText: {
-    color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-  },
-  endpointRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
+  safe: {
+    flex: 1,
+    backgroundColor: theme.colors.bgSoft,
   },
   webShell: {
     flex: 1,
-    overflow: 'hidden',
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
     backgroundColor: theme.colors.bgSoft,
   },
   web: {

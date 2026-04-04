@@ -44,7 +44,15 @@ export default function RootLayout() {
         <Stack.Screen name="about" options={{ title: 'About' }} />
         <Stack.Screen name="wifi" options={{ headerShown: false }} />
         <Stack.Screen name="biometric" options={{ title: 'Biometric Login' }} />
-        <Stack.Screen name="webview-login" options={{ title: 'Browser Login', presentation: 'modal' }} />
+        <Stack.Screen
+          name="webview-login"
+          options={{
+            title: 'Web Portal',
+            presentation: 'modal',
+            headerShadowVisible: false,
+            contentStyle: { flex: 1, backgroundColor: theme.colors.bgSoft },
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
