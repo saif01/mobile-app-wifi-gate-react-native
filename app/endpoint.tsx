@@ -43,9 +43,9 @@ export default function EndpointScreen() {
 
   return (
     <Screen scroll contentStyle={styles.content}>
-      <Eyebrow>Network Target</Eyebrow>
-      <Title style={styles.title}>Firewall Endpoint</Title>
-      <Subtitle>Update the captive portal URL used for direct firewall login requests.</Subtitle>
+      <Eyebrow>Editor</Eyebrow>
+      <Title style={styles.title}>Firewall endpoint</Title>
+      <Subtitle>View, edit, and validate the captive portal URL used for direct firewall login.</Subtitle>
 
       <Card style={styles.card}>
         <Controller

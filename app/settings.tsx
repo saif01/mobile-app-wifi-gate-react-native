@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Fingerprint, Globe, Info, Shield, Wifi } from 'lucide-react-native';
+import { Fingerprint, Globe, Info, Radar, ShieldCheck, Smartphone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
@@ -88,27 +88,84 @@ export default function SettingsScreen() {
       </Card>
 
       <SectionHeader title="Security" />
-      <Card>
-        <ListItem
-          title="Fingerprint Login"
-          subtitle={
-            !manualLoginDone
-              ? 'Login with ID and password first.'
-              : biometricCredentialsStored
-                ? 'Use stored credentials after fingerprint.'
-                : 'Enable after your latest manual login.'
-          }
-          icon={Fingerprint}
-          trailing={<ToggleTrailing value={biometricEnabled} onValueChange={onBiometricToggle} disabled={!hardwareAvailable && !biometricEnabled} />}
-        />
+      <Card style={styles.bioCard}>
+        <View style={styles.bioRow}>
+          <View
+            style={[
+              styles.bioIconWrap,
+              biometricEnabled && biometricCredentialsStored ? styles.bioIconWrapActive : styles.bioIconWrapIdle,
+            ]}>
+            <Fingerprint
+              color={
+                biometricEnabled && biometricCredentialsStored
+                  ? theme.colors.success
+                  : hardwareAvailable
+                    ? theme.colors.primary
+                    : theme.colors.textSoft
+              }
+              size={26}
+              strokeWidth={2.3}
+            />
+          </View>
+          <View style={styles.bioTextCol}>
+            <Body style={styles.bioHeading}>Fingerprint login</Body>
+            <Caption style={styles.bioSub}>
+              {!manualLoginDone
+                ? 'Sign in with ID and password once, then you can turn this on.'
+                : biometricCredentialsStored
+                  ? 'Unlocks saved credentials after biometric verification.'
+                  : 'Complete a manual login to store credentials for fingerprint use.'}
+            </Caption>
+            <View style={styles.bioBadgeRow}>
+              <StatusBadge
+                tone={biometricEnabled && biometricCredentialsStored ? 'success' : 'neutral'}
+                label={
+                  !hardwareAvailable
+                    ? 'Unavailable'
+                    : biometricEnabled && biometricCredentialsStored
+                      ? 'Enabled'
+                      : biometricEnabled
+                        ? 'Waiting for credentials'
+                        : 'Off'
+                }
+              />
+            </View>
+          </View>
+          <ToggleTrailing
+            value={biometricEnabled}
+            onValueChange={onBiometricToggle}
+            disabled={!hardwareAvailable && !biometricEnabled}
+            trackTone="success"
+            large
+          />
+        </View>
       </Card>
 
-      <SectionHeader title="Network" />
+      <SectionHeader title="Network" subtitle="Firewall target, Wi‑Fi policy, and background login." />
       <Card>
         <ListItem
+          title="Firewall endpoint"
+          subtitle={settings.firewallEndpoint}
+          icon={Globe}
+          iconTint="primary"
+          onPress={() => router.push('/endpoint')}
+        />
+        <ListItem
+          title="Wi‑Fi lists"
+          subtitle={`${settings.allowedWifi.filter((entry) => entry.isActive).length} portal allowlist · ${settings.noLoginWifi.filter((entry) => entry.isActive).length} no-portal`}
+          icon={ShieldCheck}
+          iconTint="cyan"
+          onPress={() => router.push('/(tabs)/wifi')}
+        />
+        <ListItem
           title="Auto Login Agent"
-          subtitle={settings.autoLoginEnabled ? 'Automatically authenticate on allowed WiFi.' : 'Only detect WiFi and wait for manual action.'}
-          icon={Shield}
+          subtitle={
+            settings.autoLoginEnabled
+              ? 'When Wi‑Fi allows portal login, syncs session and signs in with saved credentials if needed.'
+              : 'Background auto-login is off — use manual sign-in on the Session tab.'
+          }
+          icon={Radar}
+          iconTint="success"
           trailing={
             <ToggleTrailing
               value={settings.autoLoginEnabled}
@@ -118,17 +175,11 @@ export default function SettingsScreen() {
             />
           }
         />
-        <ListItem title="Firewall Endpoint" subtitle={settings.firewallEndpoint} icon={Globe} onPress={() => router.push('/endpoint')} />
         <ListItem
-          title="WiFi lists"
-          subtitle={`${settings.allowedWifi.filter((entry) => entry.isActive).length} portal login · ${settings.noLoginWifi.filter((entry) => entry.isActive).length} no-portal`}
-          icon={Wifi}
-          onPress={() => router.push('/(tabs)/wifi')}
-        />
-        <ListItem
-          title="Warn About Mobile Data"
-          subtitle="Warn if mobile data may interfere."
-          icon={Shield}
+          title="Warn about mobile data"
+          subtitle="On allowed Wi‑Fi, show a hint when cellular data might steal traffic from the portal."
+          icon={Smartphone}
+          iconTint="warning"
           trailing={
             <ToggleTrailing
               value={settings.warnCellularInterference}
@@ -142,7 +193,7 @@ export default function SettingsScreen() {
 
       <SectionHeader title="General" />
       <Card>
-        <ListItem title="About" subtitle="Version, app info, and features." icon={Info} onPress={() => router.push('/about')} />
+        <ListItem title="About" subtitle="Version, app info, and features." icon={Info} iconTint="default" onPress={() => router.push('/about')} />
         <Body style={styles.versionText}>WiFiGate v{version}</Body>
         <Caption style={styles.versionCaption}>Captive portal access app.</Caption>
       </Card>
@@ -190,5 +241,46 @@ const styles = StyleSheet.create({
   },
   versionCaption: {
     maxWidth: 320,
+  },
+  bioCard: {
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  bioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  bioIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+  },
+  bioIconWrapActive: {
+    backgroundColor: 'rgba(61, 220, 151, 0.14)',
+    borderColor: 'rgba(61, 220, 151, 0.35)',
+  },
+  bioIconWrapIdle: {
+    backgroundColor: 'rgba(86, 194, 255, 0.1)',
+    borderColor: theme.colors.borderStrong,
+  },
+  bioTextCol: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  bioHeading: {
+    fontWeight: '800',
+    fontSize: 16,
+    color: theme.colors.text,
+  },
+  bioSub: {
+    lineHeight: 17,
+  },
+  bioBadgeRow: {
+    marginTop: 6,
   },
 });

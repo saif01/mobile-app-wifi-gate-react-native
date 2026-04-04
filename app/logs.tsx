@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { AlertCircle, CheckCircle2, Filter, Info, Search, TriangleAlert } from 'lucide-react-native';
 
@@ -42,6 +42,17 @@ export default function LogsScreen() {
     await load();
   }
 
+  function confirmClearLogs() {
+    Alert.alert(
+      'Clear all logs?',
+      'This removes every activity log entry. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => void onClear() },
+      ]
+    );
+  }
+
   const filtered = useMemo(() => {
     return items.filter((item) => {
       const levelMatch = filter === 'all' || item.level === filter;
@@ -77,7 +88,7 @@ export default function LogsScreen() {
           <Filter color={theme.colors.textMuted} size={16} strokeWidth={2.1} />
           <Caption>Filters</Caption>
         </View>
-        <PrimaryButton title="Clear Logs" onPress={onClear} variant="ghost" style={styles.clearButton} />
+        <PrimaryButton title="Clear Logs" onPress={confirmClearLogs} variant="ghost" style={styles.clearButton} />
       </View>
 
       <View style={styles.chips}>

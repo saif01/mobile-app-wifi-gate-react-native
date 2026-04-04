@@ -6,25 +6,38 @@ import { ChevronRight } from 'lucide-react-native';
 import { Body, Caption } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 
+export type ListItemIconTint = 'default' | 'primary' | 'cyan' | 'warning' | 'success';
+
+const ICON_TINT: Record<ListItemIconTint, { fg: string; bg: string }> = {
+  default: { fg: theme.colors.primary, bg: 'rgba(86, 194, 255, 0.1)' },
+  primary: { fg: theme.colors.primary, bg: 'rgba(86, 194, 255, 0.14)' },
+  cyan: { fg: theme.colors.cyan, bg: 'rgba(70, 226, 216, 0.14)' },
+  warning: { fg: theme.colors.warning, bg: 'rgba(255, 179, 71, 0.14)' },
+  success: { fg: theme.colors.success, bg: 'rgba(61, 220, 151, 0.14)' },
+};
+
 export function ListItem({
   title,
   subtitle,
   icon: Icon,
+  iconTint = 'default',
   onPress,
   trailing,
 }: {
   title: string;
   subtitle?: string;
   icon?: LucideIcon;
+  iconTint?: ListItemIconTint;
   onPress?: () => void;
   trailing?: ReactNode;
 }) {
+  const tint = ICON_TINT[iconTint];
   const content = (
     <View style={styles.row}>
       <View style={styles.leading}>
         {Icon ? (
-          <View style={styles.iconWrap}>
-            <Icon color={theme.colors.primary} size={18} strokeWidth={2.1} />
+          <View style={[styles.iconWrap, { backgroundColor: tint.bg }]}>
+            <Icon color={tint.fg} size={18} strokeWidth={2.1} />
           </View>
         ) : null}
         <View style={styles.textWrap}>
@@ -51,12 +64,32 @@ export function ToggleTrailing({
   value,
   onValueChange,
   disabled,
+  trackTone = 'primary',
+  large,
 }: {
   value: boolean;
   onValueChange: (v: boolean) => void;
   disabled?: boolean;
+  trackTone?: 'primary' | 'success';
+  large?: boolean;
 }) {
-  return <Switch value={value} onValueChange={onValueChange} disabled={disabled} />;
+  const trackOn =
+    trackTone === 'success' ? 'rgba(61, 220, 151, 0.5)' : 'rgba(86, 194, 255, 0.5)';
+  const trackOff = 'rgba(255, 255, 255, 0.14)';
+  const el = (
+    <Switch
+      value={value}
+      onValueChange={onValueChange}
+      disabled={disabled}
+      trackColor={{ false: trackOff, true: trackOn }}
+      thumbColor={value ? theme.colors.white : 'rgba(200, 210, 225, 0.95)'}
+      ios_backgroundColor={trackOff}
+    />
+  );
+  if (large) {
+    return <View style={styles.switchLarge}>{el}</View>;
+  }
+  return el;
 }
 
 const styles = StyleSheet.create({
@@ -90,7 +123,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(86, 194, 255, 0.1)',
   },
   textWrap: {
     flex: 1,
@@ -100,5 +132,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: '700',
     lineHeight: 18,
+  },
+  switchLarge: {
+    transform: [{ scaleX: 1.12 }, { scaleY: 1.12 }],
   },
 });

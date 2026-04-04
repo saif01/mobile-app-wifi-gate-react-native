@@ -1,16 +1,15 @@
 import { useFocusEffect } from '@react-navigation/native';
-import { Pencil, Plus, ShieldCheck, Trash2, Wifi, WifiOff } from 'lucide-react-native';
+import { Pencil, Plus, ShieldCheck, Trash2, Unplug, Wifi, WifiOff } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, SectionList, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/ui/Button';
 import { AppModal } from '@/components/ui/AppModal';
 import { Card } from '@/components/ui/Card';
 import { InputField } from '@/components/ui/InputField';
 import { Screen } from '@/components/ui/Screen';
-import { SectionHeader } from '@/components/ui/SectionHeader';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Body, Caption, Eyebrow, Subtitle, Title } from '@/components/ui/Typography';
+import { Body, Caption, Eyebrow, Title } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
 import {
@@ -42,6 +41,13 @@ type ModalState = {
 
 type SectionRow = { listKind: WifiListKind; entry: AllowedWifiEntry };
 
+type WifiSection = {
+  listKey: WifiListKind;
+  title: string;
+  subtitle: string;
+  data: SectionRow[];
+};
+
 function newId() {
   return `wf-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -50,22 +56,31 @@ function listSettingsKey(kind: WifiListKind): 'allowedWifi' | 'noLoginWifi' {
   return kind === 'allowed' ? 'allowedWifi' : 'noLoginWifi';
 }
 
+/** Shown under each add button so portal vs no-portal choice is obvious. */
+const ADD_HINT_PORTAL =
+  'Portal login — for Wi‑Fi with a captive/firewall portal. WiFiGate signs you in and can log you out on the gateway.';
+const ADD_HINT_NO_PORTAL =
+  'No portal — for open Wi‑Fi without a captive portal. Firewall login and server logout are not used.';
+
 export default function WifiScreen() {
   const settings = useAppStore((s) => s.settings);
   const setSettings = useAppStore((s) => s.setSettings);
 
-  const sections = useMemo(
-    () =>
-      [
-        {
-          title: 'No portal (no login/logout)',
-          data: settings.noLoginWifi.map((entry) => ({ listKind: 'noLogin' as const, entry })),
-        },
-        {
-          title: 'Portal login required',
-          data: settings.allowedWifi.map((entry) => ({ listKind: 'allowed' as const, entry })),
-        },
-      ] as { title: string; data: SectionRow[] }[],
+  const sections = useMemo<WifiSection[]>(
+    () => [
+      {
+        listKey: 'allowed',
+        title: 'Portal login',
+        subtitle: 'Wi‑Fi with a captive portal — firewall sign-in and gateway logout apply.',
+        data: settings.allowedWifi.map((entry) => ({ listKind: 'allowed' as const, entry })),
+      },
+      {
+        listKey: 'noLogin',
+        title: 'No portal',
+        subtitle: 'Open Wi‑Fi — no captive portal; firewall login and logout are skipped.',
+        data: settings.noLoginWifi.map((entry) => ({ listKind: 'noLogin' as const, entry })),
+      },
+    ],
     [settings.allowedWifi, settings.noLoginWifi]
   );
 
@@ -270,6 +285,23 @@ export default function WifiScreen() {
     setSnapshot(await getNetworkSnapshot());
   }
 
+  function confirmRemove(listKind: WifiListKind, entry: AllowedWifiEntry) {
+    const listLabel = listKind === 'allowed' ? 'portal allowlist' : 'no-portal list';
+    const name = entry.ssid?.trim() || entry.ip?.trim() || 'this entry';
+    Alert.alert(
+      'Delete Wi‑Fi entry?',
+      `Remove “${name}” from the ${listLabel}? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => void remove(listKind, entry.id),
+        },
+      ]
+    );
+  }
+
   const currentBadge = !snapshot?.isWifi
     ? { tone: 'neutral' as const, label: 'Offline' }
     : access?.skipPortalAuth
@@ -280,130 +312,189 @@ export default function WifiScreen() {
           ? { tone: 'warning' as const, label: 'Open mode' }
           : { tone: 'error' as const, label: 'Blocked' };
 
+  function renderWifiEntry(item: SectionRow) {
+    const portal = item.listKind === 'allowed';
+    const accent = portal ? theme.colors.wifiPortal : theme.colors.wifiNoPortal;
+    const PolicyIcon = portal ? ShieldCheck : Unplug;
+    const iconFg = item.entry.isActive ? accent : theme.colors.textSoft;
+    return (
+      <>
+        <View style={styles.itemHeader}>
+          <View style={styles.itemTop}>
+            <View style={[styles.itemIcon, { backgroundColor: `${accent}20` }]}>
+              {item.entry.isActive ? (
+                <PolicyIcon color={iconFg} size={20} strokeWidth={2.3} />
+              ) : (
+                <WifiOff color={iconFg} size={20} strokeWidth={2.3} />
+              )}
+            </View>
+            <View style={styles.itemText}>
+              <Body style={styles.itemTitle}>{item.entry.ssid || 'Unnamed WiFi entry'}</Body>
+              <Caption>{item.entry.ip ? `Identifier ${item.entry.ip}` : 'Identifier not set'}</Caption>
+            </View>
+          </View>
+          <View style={styles.itemBadges}>
+            <StatusBadge
+              tone={portal ? 'success' : 'warning'}
+              label={portal ? 'Portal login' : 'No portal'}
+            />
+            <StatusBadge tone={item.entry.isActive ? 'success' : 'neutral'} label={item.entry.isActive ? 'Active' : 'Paused'} />
+          </View>
+        </View>
+
+        {item.entry.remarks ? <Caption style={styles.remarks}>{item.entry.remarks}</Caption> : null}
+
+        <View style={styles.actionRow}>
+          <PrimaryButton
+            title={item.entry.isActive ? 'Pause' : 'Resume'}
+            onPress={() => void toggleActive(item.listKind, item.entry.id, !item.entry.isActive)}
+            variant="ghost"
+            icon={ShieldCheck}
+            compact
+            style={styles.actionButton}
+          />
+          <PrimaryButton
+            title="Edit"
+            onPress={() => openEdit(item.entry, item.listKind)}
+            variant="secondary"
+            icon={Pencil}
+            compact
+            style={styles.actionButton}
+          />
+          <PrimaryButton
+            title="Delete"
+            onPress={() => confirmRemove(item.listKind, item.entry)}
+            variant="danger"
+            icon={Trash2}
+            compact
+            style={styles.actionButton}
+          />
+        </View>
+      </>
+    );
+  }
+
   return (
     <Screen contentStyle={styles.content}>
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => `${item.listKind}-${item.entry.id}`}
+      <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.list}
-        stickySectionHeadersEnabled={false}
-        renderSectionHeader={({ section: { title } }) => <SectionHeader title={title} />}
-        renderSectionFooter={({ section }) =>
-          section.data.length === 0 ? (
-            <Card style={styles.emptySectionCard}>
-              <Caption>No entries yet.</Caption>
-            </Card>
-          ) : null
-        }
-        ListHeaderComponent={
-          <>
-            <View style={styles.hero}>
-              <Eyebrow>Network Policy</Eyebrow>
-              <Title style={styles.title}>WiFi access</Title>
-              <Subtitle>No-portal networks skip firewall login and server logout. Portal lists keep the previous behavior.</Subtitle>
+        keyboardShouldPersistTaps="handled">
+        <View style={styles.hero}>
+          <Eyebrow>Network Policy</Eyebrow>
+          <Title style={styles.title}>WiFi access</Title>
+        </View>
+
+        <Card style={styles.currentCard}>
+          <View style={styles.currentHeader}>
+            <View>
+              <Caption style={styles.metaLabel}>Current network</Caption>
+              <Body style={styles.currentValue}>
+                {snapshot?.isWifi ? snapshot.ssid || 'WiFi connected' : 'No active WiFi'}
+              </Body>
             </View>
+            <StatusBadge tone={currentBadge.tone} label={currentBadge.label} />
+          </View>
+          <Caption>{snapshot?.gatewayIp ? `Gateway ${snapshot.gatewayIp}` : 'Connect to WiFi.'}</Caption>
+        </Card>
 
-            <Card style={styles.currentCard}>
-              <View style={styles.currentHeader}>
-                <View>
-                  <Caption style={styles.metaLabel}>Current network</Caption>
-                  <Body style={styles.currentValue}>
-                    {snapshot?.isWifi ? snapshot.ssid || 'WiFi connected' : 'No active WiFi'}
-                  </Body>
-                </View>
-                <StatusBadge tone={currentBadge.tone} label={currentBadge.label} />
-              </View>
-              <Caption>{snapshot?.gatewayIp ? `Gateway ${snapshot.gatewayIp}` : 'Connect to WiFi.'}</Caption>
-            </Card>
-
-            {feedback ? (
-              <Card
-                style={[
-                  styles.feedback,
-                  feedback.kind === 'error'
-                    ? styles.feedbackError
-                    : feedback.kind === 'success'
-                      ? styles.feedbackSuccess
-                      : styles.feedbackInfo,
-                ]}>
-                <Body style={styles.feedbackText}>{feedback.message}</Body>
-              </Card>
-            ) : null}
-
-            <View style={styles.ctaStack}>
-              <PrimaryButton
-                title="Add current — portal login"
-                onPress={() => void openQuickAdd('allowed')}
-                loading={detecting}
-                disabled={detecting}
-                icon={Plus}
-                trailingArrow
-              />
-              <PrimaryButton
-                title="Add current — no portal"
-                onPress={() => void openQuickAdd('noLogin')}
-                loading={detecting}
-                disabled={detecting}
-                variant="secondary"
-                icon={Wifi}
-                trailingArrow
-              />
-              <PrimaryButton title="Add manually — portal" onPress={() => openManualAdd('allowed')} variant="secondary" icon={ShieldCheck} />
-              <PrimaryButton title="Add manually — no portal" onPress={() => openManualAdd('noLogin')} variant="ghost" icon={WifiOff} />
-            </View>
-          </>
-        }
-        renderItem={({ item }) => (
-          <Card style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-              <View style={styles.itemTop}>
-                <View style={styles.itemIcon}>
-                  {item.entry.isActive ? (
-                    <Wifi color={theme.colors.primary} size={18} strokeWidth={2.2} />
-                  ) : (
-                    <WifiOff color={theme.colors.textSoft} size={18} strokeWidth={2.2} />
-                  )}
-                </View>
-                <View style={styles.itemText}>
-                  <Body style={styles.itemTitle}>{item.entry.ssid || 'Unnamed WiFi entry'}</Body>
-                  <Caption>{item.entry.ip ? `Identifier ${item.entry.ip}` : 'Identifier not set'}</Caption>
-                </View>
-              </View>
-              <View style={styles.itemBadges}>
-                <StatusBadge tone="neutral" label={item.listKind === 'noLogin' ? 'No portal' : 'Portal'} />
-                <StatusBadge tone={item.entry.isActive ? 'success' : 'neutral'} label={item.entry.isActive ? 'Active' : 'Paused'} />
-              </View>
-            </View>
-
-            {item.entry.remarks ? <Caption style={styles.remarks}>{item.entry.remarks}</Caption> : null}
-
-            <View style={styles.actionRow}>
-              <PrimaryButton
-                title={item.entry.isActive ? 'Pause' : 'Activate'}
-                onPress={() => void toggleActive(item.listKind, item.entry.id, !item.entry.isActive)}
-                variant="ghost"
-                icon={ShieldCheck}
-                style={styles.actionButton}
-              />
-              <PrimaryButton
-                title="Edit"
-                onPress={() => openEdit(item.entry, item.listKind)}
-                variant="secondary"
-                icon={Pencil}
-                style={styles.actionButton}
-              />
-              <PrimaryButton
-                title="Delete"
-                onPress={() => void remove(item.listKind, item.entry.id)}
-                variant="danger"
-                icon={Trash2}
-                style={styles.actionButton}
-              />
-            </View>
+        {feedback ? (
+          <Card
+            style={[
+              styles.feedback,
+              feedback.kind === 'error'
+                ? styles.feedbackError
+                : feedback.kind === 'success'
+                  ? styles.feedbackSuccess
+                  : styles.feedbackInfo,
+            ]}>
+            <Body style={styles.feedbackText}>{feedback.message}</Body>
           </Card>
-        )}
-      />
+        ) : null}
+
+        <View style={styles.ctaStack}>
+          <View style={styles.ctaBlock}>
+            <PrimaryButton
+              title="Add current — portal login"
+              onPress={() => void openQuickAdd('allowed')}
+              loading={detecting}
+              disabled={detecting}
+              icon={Plus}
+              trailingArrow
+            />
+            <Caption style={[styles.ctaHint, styles.ctaHintPortal]}>{ADD_HINT_PORTAL}</Caption>
+          </View>
+          <View style={styles.ctaBlock}>
+            <PrimaryButton
+              title="Add current — no portal"
+              onPress={() => void openQuickAdd('noLogin')}
+              loading={detecting}
+              disabled={detecting}
+              variant="secondary"
+              icon={Unplug}
+              trailingArrow
+            />
+            <Caption style={[styles.ctaHint, styles.ctaHintNoPortal]}>{ADD_HINT_NO_PORTAL}</Caption>
+          </View>
+          <View style={styles.ctaBlock}>
+            <PrimaryButton title="Add manually — portal" onPress={() => openManualAdd('allowed')} variant="secondary" icon={ShieldCheck} />
+            <Caption style={[styles.ctaHint, styles.ctaHintPortal]}>{ADD_HINT_PORTAL}</Caption>
+          </View>
+          <View style={styles.ctaBlock}>
+            <PrimaryButton title="Add manually — no portal" onPress={() => openManualAdd('noLogin')} variant="ghost" icon={WifiOff} />
+            <Caption style={[styles.ctaHint, styles.ctaHintNoPortal]}>{ADD_HINT_NO_PORTAL}</Caption>
+          </View>
+        </View>
+
+        {sections.map((section) => {
+          const portal = section.listKey === 'allowed';
+          const accent = portal ? theme.colors.wifiPortal : theme.colors.wifiNoPortal;
+          const PolicyIcon = portal ? ShieldCheck : Unplug;
+          const tintBg = portal ? 'rgba(86, 194, 255, 0.07)' : 'rgba(61, 212, 192, 0.08)';
+          return (
+            <Card
+              key={section.listKey}
+              style={[
+                styles.sectionGroup,
+                {
+                  borderTopWidth: 4,
+                  borderTopColor: accent,
+                  backgroundColor: tintBg,
+                  borderColor: `${accent}38`,
+                },
+              ]}>
+              <View style={styles.sectionGroupHeader}>
+                <View style={[styles.sectionIconRing, { backgroundColor: `${accent}22`, borderColor: `${accent}40` }]}>
+                  <PolicyIcon color={accent} size={22} strokeWidth={2.3} />
+                </View>
+                <View style={styles.sectionHeaderText}>
+                  <Body style={styles.sectionHeaderTitle}>{section.title}</Body>
+                  <Caption style={styles.sectionHeaderSubtitle}>{section.subtitle}</Caption>
+                </View>
+                <View style={[styles.sectionCountPill, { backgroundColor: `${accent}20` }]}>
+                  <Caption style={[styles.sectionCountLabel, { color: accent }]}>{section.data.length}</Caption>
+                </View>
+              </View>
+
+              {section.data.length === 0 ? (
+                <View style={[styles.sectionEmptyInner, { borderColor: `${accent}30` }]}>
+                  <Caption style={styles.sectionEmptyText}>
+                    No networks here yet — use the matching “portal” or “no portal” buttons above.
+                  </Caption>
+                </View>
+              ) : (
+                <View style={styles.sectionEntries}>
+                  {section.data.map((row) => (
+                    <View key={`${row.listKind}-${row.entry.id}`} style={styles.nestedEntry}>
+                      {renderWifiEntry(row)}
+                    </View>
+                  ))}
+                </View>
+              )}
+            </Card>
+          );
+        })}
+      </ScrollView>
 
       <AppModal
         visible={modal.visible}
@@ -503,15 +594,89 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(34, 60, 96, 0.4)',
   },
   ctaStack: {
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.md,
   },
-  emptySectionCard: {
-    marginBottom: theme.spacing.sm,
+  ctaBlock: {
+    gap: 6,
   },
-  itemCard: {
-    marginBottom: theme.spacing.sm,
+  ctaHint: {
+    lineHeight: 17,
+    paddingHorizontal: 2,
+  },
+  ctaHintPortal: {
+    color: theme.colors.wifiPortal,
+    opacity: 0.92,
+  },
+  ctaHintNoPortal: {
+    color: theme.colors.wifiNoPortal,
+    opacity: 0.92,
+  },
+  sectionGroup: {
+    marginTop: theme.spacing.lg,
+  },
+  sectionGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.md,
+  },
+  sectionIconRing: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionHeaderText: {
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  sectionHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  sectionHeaderSubtitle: {
+    lineHeight: 18,
+    color: theme.colors.textMuted,
+  },
+  sectionCountPill: {
+    minWidth: 36,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: theme.radius.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionCountLabel: {
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  sectionEmptyInner: {
+    marginTop: theme.spacing.sm,
+    padding: theme.spacing.md,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+  },
+  sectionEmptyText: {
+    textAlign: 'center',
+    color: theme.colors.textMuted,
+    lineHeight: 18,
+  },
+  sectionEntries: {
+    marginTop: theme.spacing.md,
+    gap: theme.spacing.sm,
+  },
+  nestedEntry: {
+    backgroundColor: theme.colors.surfaceStrong,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   itemHeader: {
     gap: theme.spacing.sm,
@@ -522,10 +687,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   itemIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 12,
-    backgroundColor: 'rgba(86, 194, 255, 0.1)',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -547,11 +711,14 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   actionRow: {
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: theme.spacing.sm,
+    alignItems: 'stretch',
   },
   actionButton: {
-    width: '100%',
+    flex: 1,
+    minWidth: 0,
   },
   detectedCard: {
     marginBottom: theme.spacing.md,

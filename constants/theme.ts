@@ -19,6 +19,10 @@ export const theme = {
     white: '#ffffff',
     overlay: 'rgba(2, 10, 20, 0.72)',
     shadow: '#02101d',
+    /** Portal allowlist rows / headers */
+    wifiPortal: '#56c2ff',
+    /** No-portal list rows / headers */
+    wifiNoPortal: '#3dd4c0',
   },
   spacing: {
     xs: 4,
