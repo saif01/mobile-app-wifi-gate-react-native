@@ -20,6 +20,7 @@ The original product specification is in [`docs/srs.text`](docs/srs.text).
 | **Web Portal** | Modal **Web Portal** screen: full-screen **WebView** to the resolved portal URL; optional **injected script** auto-fills Sophos `#username` / `#password` and calls `submitRequest()` when opened from the fallback flow. |
 | **Logout** | **Logout** calls the portal **`logout.xml`** (e.g. Sophos `mode=193`) when possible **and** the current network is **not** on the no-portal list; then clears the **in-app session** flag and last-login time. **Saved credentials are not removed** so auto-login can run again after the next successful portal sign-in. |
 | **Biometrics** | After at least one successful manual login, user can enable **Fingerprint Login** in Settings; Session screen can sign in via biometrics + stored credentials. |
+| **Session (Login)** | Sign-in (or **Continue** on no-portal Wi‑Fi), optional fingerprint, **WiFi status**, and **Continue in Portal** when the agent requires the WebView. Footer: **Powered By CPB-IT** and app **version**. Firewall URL and other options live under **Settings** (no Settings shortcut on this screen). |
 | **Settings** | Firewall endpoint editor, **Wi‑Fi lists** (portal allowlist + no-portal list), **Auto Login Agent**, **Warn about mobile data**, biometric toggle, link to **About**. |
 | **Dashboard (Home)** | Wi‑Fi/access/session overview, **credentials** / **auto-login** chips, **last login**, refresh, reconnect, **Web Portal**, logout. |
 | **Activity logs** | Local **append-only style** log (info/warn/error/success) with a cap (see `constants/defaults.ts`). |
@@ -135,7 +136,7 @@ npx eas-cli@latest update --branch production --message "Describe change"
 
 ### 1. Manual login (Session tab)
 
-1. **Wi‑Fi gate** (`services/wifiGateAuth.ts`): must be on Wi‑Fi and satisfy policy (portal allowlist if configured, or a **no-portal** match). On no-portal Wi‑Fi, the Session screen skips direct portal login and can continue without credentials.
+1. **Wi‑Fi gate** (`services/wifiGateAuth.ts`): must be on Wi‑Fi and satisfy policy (portal allowlist if configured, or a **no-portal** match). On no-portal Wi‑Fi, the Session screen skips direct portal login and can continue without credentials. The Session UI (`app/login.tsx`) is intentionally minimal: network hint and portal fallback only, not a duplicate settings or agent dashboard.
 2. **Direct login** (`services/firewallLogin.ts`): Sophos XML path first when URL/HTML matches, else generic form POST; detailed errors via `describeFirewallLoginFailure`.
 3. On success: **SecureStore** credentials + session flag, optional biometric offer, navigate **Home**.
 

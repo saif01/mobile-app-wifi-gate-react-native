@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
+import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Fingerprint, KeyRound, LockKeyhole, Settings2, ShieldCheck, Wifi } from 'lucide-react-native';
+import { Fingerprint, KeyRound, LockKeyhole, ShieldCheck, Wifi } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Alert, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
 import { PrimaryButton } from '@/components/ui/Button';
@@ -52,6 +54,8 @@ function shouldOfferPortalFallback(reason?: string): boolean {
 }
 
 export default function LoginScreen() {
+  const appVersion = Constants.expoConfig?.version ?? '1.0.1';
+  const insets = useSafeAreaInsets();
   const settings = useAppStore((s) => s.settings);
   const lastLoginId = useAppStore((s) => s.lastLoginId);
   const biometricEnabled = useAppStore((s) => s.biometricEnabled);
@@ -308,29 +312,34 @@ export default function LoginScreen() {
   }
 
   return (
-    <Screen scroll contentStyle={styles.content}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={styles.headerSection}>
-          <View style={styles.headerRow}>
-            <View style={styles.logoShell}>
-              <LinearGradient
-                colors={['rgba(99, 216, 255, 0.35)', 'rgba(45, 143, 255, 0.2)']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.logoGradient}>
-                <View style={styles.logoCore}>
-                  <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+    <Screen contentStyle={styles.loginScreenOuter}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.loginKav}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
+        <View style={styles.loginStack}>
+          <View style={styles.loginMain}>
+            <View style={styles.headerSection}>
+              <View style={styles.headerRow}>
+                <View style={styles.logoShell}>
+                  <LinearGradient
+                    colors={['rgba(99, 216, 255, 0.35)', 'rgba(45, 143, 255, 0.2)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.logoGradient}>
+                    <View style={styles.logoCore}>
+                      <Image source={require('../assets/images/icon.png')} style={styles.logoImage} resizeMode="contain" />
+                    </View>
+                  </LinearGradient>
                 </View>
-              </LinearGradient>
+                <View style={styles.headerText}>
+                  <Title style={styles.brandTitle}>WiFiGate</Title>
+                  <Caption style={styles.brandTag}>Firewall portal</Caption>
+                </View>
+              </View>
             </View>
-            <View style={styles.headerText}>
-              <Title style={styles.brandTitle}>WiFiGate</Title>
-              <Caption style={styles.brandTag}>Firewall portal</Caption>
-            </View>
-          </View>
-        </View>
 
-        <View style={styles.mainCard}>
+            <View style={styles.mainCard}>
           <LinearGradient colors={['#46e2d8', '#56c2ff', '#2e8fff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardAccent} />
 
           <View style={styles.formTitleRow}>
@@ -421,77 +430,16 @@ export default function LoginScreen() {
             </>
           )}
 
-          <View style={styles.utilityRow}>
-            <PrimaryButton title="Settings" variant="ghost" onPress={() => router.push('/(tabs)/settings')} icon={Settings2} style={styles.utilityButton} />
-          </View>
-
           <View style={styles.dividerMuted} />
-
-          <Caption style={styles.endpointLabel}>Endpoint</Caption>
-          <Text style={styles.endpointMono} numberOfLines={2} selectable>
-            {settings.firewallEndpoint}
-          </Text>
-
-          <View style={styles.dividerMuted} />
-
-          <View style={styles.quickStatusRow}>
-            <Caption style={styles.quickStatusLabel}>Saved credentials</Caption>
-            <StatusBadge
-              tone={storedCredentialsAvailable ? 'success' : 'neutral'}
-              label={storedCredentialsAvailable ? 'Available' : 'None'}
-            />
-          </View>
-          <Caption style={styles.quickStatusHint}>
-            {storedCredentialsAvailable
-              ? 'Auto-login can run when Wi‑Fi is ready and enabled in Settings.'
-              : 'Successful sign-in stores ID and password in secure storage for next launch.'}
-          </Caption>
-
-          <View style={styles.dividerMuted} />
-
-          <View style={styles.networkSection}>
-            <View style={styles.networkHeaderRow}>
-              <View style={styles.networkTitleLeft}>
-                <ShieldCheck color={theme.colors.primary} size={16} strokeWidth={2.2} />
-                <Caption style={styles.networkSectionLabel}>Agent status</Caption>
-              </View>
-              <StatusBadge
-                tone={
-                  authAgent.status === 'authenticated'
-                    ? 'success'
-                    : authAgent.status === 'authenticating' || authAgent.status === 'checking'
-                      ? 'warning'
-                      : authAgent.status === 'needs_portal' || authAgent.status === 'error' || authAgent.status === 'blocked'
-                        ? 'error'
-                        : 'neutral'
-                }
-                label={
-                  authAgent.status === 'authenticated'
-                    ? 'Live'
-                    : authAgent.status === 'authenticating'
-                      ? 'Login'
-                      : authAgent.status === 'checking'
-                        ? 'Check'
-                        : authAgent.status === 'needs_portal'
-                          ? 'Portal'
-                          : authAgent.status === 'needs_credentials'
-                            ? 'Setup'
-                            : authAgent.status === 'paused'
-                              ? 'Paused'
-                              : 'Idle'
-                }
-              />
-            </View>
-            <Text style={styles.networkHintBody}>{authAgent.message}</Text>
-          </View>
 
           {authAgent.status === 'needs_portal' && storedCredentialsAvailable ? (
-            <View style={styles.secondaryAction}>
-              <PrimaryButton title="Continue in Portal" variant="secondary" onPress={() => void continuePortalWithStoredCredentials()} icon={Wifi} />
-            </View>
+            <>
+              <View style={styles.secondaryAction}>
+                <PrimaryButton title="Continue in Portal" variant="secondary" onPress={() => void continuePortalWithStoredCredentials()} icon={Wifi} />
+              </View>
+              <View style={styles.dividerMuted} />
+            </>
           ) : null}
-
-          <View style={styles.dividerMuted} />
 
           <View style={styles.networkSection}>
             <View style={styles.networkHeaderRow}>
@@ -506,6 +454,13 @@ export default function LoginScreen() {
             </View>
             <Text style={styles.networkHintBody}>{netHint ?? 'Checking WiFi status...'}</Text>
           </View>
+            </View>
+          </View>
+
+          <View style={[styles.loginFooter, { paddingBottom: Math.max(theme.spacing.xs, insets.bottom) }]}>
+            <Caption style={styles.footerPowered}>Powered By CPB-IT</Caption>
+            <Caption style={styles.footerVersion}>Version {appVersion}</Caption>
+          </View>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -513,12 +468,37 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  content: {
-    paddingTop: theme.spacing.md,
+  loginScreenOuter: {
+    flex: 1,
+    paddingTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.xs,
+  },
+  loginKav: {
+    flex: 1,
+  },
+  loginStack: {
+    flex: 1,
+  },
+  loginMain: {
+    flexShrink: 1,
+  },
+  loginFooter: {
+    alignItems: 'center',
+    gap: 2,
+    marginTop: theme.spacing.xs,
+  },
+  footerPowered: {
+    color: theme.colors.textSoft,
+    fontSize: 11,
+    letterSpacing: 0.3,
+  },
+  footerVersion: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
   },
   headerSection: {
     alignItems: 'center',
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
   },
   headerRow: {
     flexDirection: 'row',
@@ -566,10 +546,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    padding: theme.spacing.lg,
-    paddingTop: theme.spacing.md + 3,
+    padding: theme.spacing.md,
+    paddingTop: theme.spacing.md + 2,
     overflow: 'hidden',
-    marginBottom: theme.spacing.xl,
     ...theme.shadow.card,
   },
   cardAccent: {
@@ -634,63 +613,21 @@ const styles = StyleSheet.create({
   helperText: {
     marginTop: theme.spacing.sm,
   },
-  utilityRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.sm,
-  },
-  utilityButton: {
-    flex: 1,
-  },
   dividerMuted: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: theme.colors.border,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  endpointLabel: {
-    color: theme.colors.textSoft,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    fontSize: 10,
-    marginBottom: 4,
-  },
-  endpointMono: {
-    color: theme.colors.text,
-    fontSize: 12,
-    fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
-    lineHeight: 17,
-  },
-  quickStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.xs,
-  },
-  quickStatusLabel: {
-    color: theme.colors.textSoft,
-    fontWeight: '700',
-    fontSize: 11,
-    letterSpacing: 0.4,
-    textTransform: 'uppercase',
-  },
-  quickStatusHint: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
+    marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.xs,
   },
   networkSection: {
-    marginTop: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
   },
   networkHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
   },
   networkTitleLeft: {
     flexDirection: 'row',
