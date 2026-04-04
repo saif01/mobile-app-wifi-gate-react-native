@@ -64,6 +64,8 @@ export default function DashboardScreen() {
   const settings = useAppStore((s) => s.settings);
   const isAuthenticated = useAppStore((s) => s.isAuthenticated);
   const lastLoginAt = useAppStore((s) => s.lastLoginAt);
+  const authAgent = useAppStore((s) => s.authAgent);
+  const storedCredentialsAvailable = useAppStore((s) => s.storedCredentialsAvailable);
   const clearSession = useAppStore((s) => s.clearSession);
 
   const [snap, setSnap] = useState<NetworkSnapshot | null>(null);
@@ -119,6 +121,24 @@ export default function DashboardScreen() {
 
   const sessionTone: 'success' | 'error' = isAuthenticated ? 'success' : 'error';
   const lastStr = lastLoginAt ? new Date(lastLoginAt).toLocaleString() : '—';
+  const agentTone: 'success' | 'error' | 'warning' | 'neutral' =
+    authAgent.status === 'authenticated'
+      ? 'success'
+      : authAgent.status === 'authenticating' || authAgent.status === 'checking'
+        ? 'warning'
+        : authAgent.status === 'error' || authAgent.status === 'blocked' || authAgent.status === 'needs_portal'
+          ? 'error'
+          : 'neutral';
+
+  const autoLoginRunning =
+    settings.autoLoginEnabled &&
+    (authAgent.status === 'authenticating' || authAgent.status === 'checking');
+
+  const loginOutcomeLabel = isAuthenticated
+    ? 'Login successful'
+    : authAgent.status === 'error' || authAgent.status === 'needs_portal'
+      ? 'Login failed or needs browser'
+      : 'Not signed in';
 
   return (
     <Screen>
@@ -181,12 +201,56 @@ export default function DashboardScreen() {
             {isAuthenticated ? 'Firewall session is active.' : 'Sign in to open a session.'}
           </Body>
 
+          <View style={styles.outcomeRow}>
+            <Caption style={styles.metaLabel}>Login status</Caption>
+            <Text style={styles.metaValue} numberOfLines={2}>
+              {loginOutcomeLabel}
+              {autoLoginRunning ? ' · Auto-login running' : ''}
+            </Text>
+          </View>
+
           <View style={styles.metaGrid}>
+            <View style={styles.metaCell}>
+              <Caption style={styles.metaLabel}>Saved credentials</Caption>
+              <View style={styles.agentRow}>
+                <StatusBadge tone={storedCredentialsAvailable ? 'success' : 'neutral'} label={storedCredentialsAvailable ? 'Available' : 'None'} />
+                <Text style={styles.metaValue} numberOfLines={2}>
+                  {storedCredentialsAvailable
+                    ? 'Stored in secure storage (not shown in UI).'
+                    : 'Sign in successfully once to enable auto-login.'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.metaCell}>
+              <Caption style={styles.metaLabel}>Auto-login</Caption>
+              <View style={styles.agentRow}>
+                <StatusBadge
+                  tone={!settings.autoLoginEnabled ? 'neutral' : autoLoginRunning ? 'warning' : 'success'}
+                  label={!settings.autoLoginEnabled ? 'Off' : autoLoginRunning ? 'Running' : 'On'}
+                />
+                <Text style={styles.metaValue} numberOfLines={2}>
+                  {!settings.autoLoginEnabled
+                    ? 'Enable under Settings to log in automatically when Wi‑Fi is ready.'
+                    : autoLoginRunning
+                      ? authAgent.message
+                      : 'Monitors Wi‑Fi and portal when the app is open.'}
+                </Text>
+              </View>
+            </View>
             <View style={styles.metaCell}>
               <Caption style={styles.metaLabel}>Last login</Caption>
               <Text style={styles.metaValue} numberOfLines={2}>
                 {lastStr}
               </Text>
+            </View>
+            <View style={styles.metaCell}>
+              <Caption style={styles.metaLabel}>Auth agent</Caption>
+              <View style={styles.agentRow}>
+                <StatusBadge tone={agentTone} label={authAgent.status === 'authenticated' ? 'Auto' : 'Monitor'} />
+                <Text style={styles.metaValue} numberOfLines={3}>
+                  {authAgent.message}
+                </Text>
+              </View>
             </View>
             <View style={styles.metaCell}>
               <Caption style={styles.metaLabel}>Endpoint</Caption>
@@ -349,11 +413,18 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: theme.spacing.sm,
   },
+  outcomeRow: {
+    gap: 4,
+    marginBottom: theme.spacing.sm,
+  },
   metaGrid: {
     gap: theme.spacing.sm,
   },
   metaCell: {
     gap: 4,
+  },
+  agentRow: {
+    gap: theme.spacing.xs,
   },
   metaLabel: {
     color: theme.colors.textSoft,

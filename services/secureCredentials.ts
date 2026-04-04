@@ -2,14 +2,14 @@ import * as SecureStore from 'expo-secure-store';
 import { STORAGE_KEYS } from '@/constants/defaults';
 import type { SavedCredentials } from '@/types/models';
 
-export async function saveSuccessfulCredentials(userId: string, password: string, lastLoginAt: number): Promise<void> {
+export async function storeSavedCredentials(userId: string, password: string, savedAt: number): Promise<void> {
   await SecureStore.setItemAsync(STORAGE_KEYS.CRED_USER, userId, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED,
   });
   await SecureStore.setItemAsync(STORAGE_KEYS.CRED_PASS, password, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED,
   });
-  await SecureStore.setItemAsync(STORAGE_KEYS.CRED_META, new Date(lastLoginAt).toISOString(), {
+  await SecureStore.setItemAsync(STORAGE_KEYS.CRED_META, new Date(savedAt).toISOString(), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED,
   });
 }
@@ -34,6 +34,22 @@ export async function clearSavedCredentials(): Promise<void> {
 
 export async function hasSavedCredentials(): Promise<boolean> {
   return (await getSavedCredentials()) !== null;
+}
+
+export async function storeBiometricCredentials(userId: string, password: string, savedAt: number): Promise<void> {
+  await storeSavedCredentials(userId, password, savedAt);
+}
+
+export async function getBiometricCredentials(): Promise<SavedCredentials | null> {
+  return await getSavedCredentials();
+}
+
+export async function clearBiometricCredentials(): Promise<void> {
+  await clearSavedCredentials();
+}
+
+export async function hasBiometricCredentials(): Promise<boolean> {
+  return await hasSavedCredentials();
 }
 
 export async function setSessionAuthenticated(flag: boolean): Promise<void> {

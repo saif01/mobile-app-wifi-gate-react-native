@@ -1,4 +1,5 @@
 import NetInfo from '@react-native-community/netinfo';
+import * as ExpoNetwork from 'expo-network';
 import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 
@@ -44,6 +45,12 @@ function deriveGateway(ipAddress: string | null): string | null {
   const parts = ipAddress.split('.');
   if (parts.length !== 4) return null;
   return `${parts[0]}.${parts[1]}.${parts[2]}.1`;
+}
+
+function pickExpoIp(ipAddress: string | null | undefined): string | null {
+  if (typeof ipAddress !== 'string') return null;
+  const normalized = ipAddress.trim();
+  return normalized && normalized !== '0.0.0.0' ? normalized : null;
 }
 
 async function getLocationPermissionState(requestPermission: boolean): Promise<LocationPermissionState> {
@@ -101,16 +108,27 @@ export async function getCurrentWifiInfo(options?: {
 }
 
 export async function getNetworkSnapshot(): Promise<NetworkSnapshot> {
-  const netInfo = await NetInfo.fetch();
-  const type = netInfo.type;
-  const isWifi = type === 'wifi';
-  const isCellular = type === 'cellular';
+  const [netInfo, expoState, expoIp] = await Promise.all([
+    NetInfo.fetch(),
+    ExpoNetwork.getNetworkStateAsync().catch(() => null),
+    ExpoNetwork.getIpAddressAsync().catch(() => null),
+  ]);
+  const type =
+    netInfo.type === 'unknown' && expoState?.type
+      ? expoState.type.toLowerCase()
+      : netInfo.type;
+  const isWifi = type === 'wifi' || expoState?.type === ExpoNetwork.NetworkStateType.WIFI;
+  const isCellular = type === 'cellular' || expoState?.type === ExpoNetwork.NetworkStateType.CELLULAR;
   const details = netInfo.details as Record<string, unknown> | undefined;
-  const ipAddress = pickIp(details);
+  const ipAddress = pickIp(details) ?? pickExpoIp(expoIp);
   const gatewayIp = isWifi ? deriveGateway(ipAddress) : null;
+  const isConnected =
+    netInfo.isConnected === true ||
+    expoState?.isConnected === true ||
+    (Boolean(ipAddress) && type !== 'none');
 
   return {
-    isConnected: netInfo.isConnected === true,
+    isConnected,
     type,
     isWifi,
     isCellular,
@@ -170,9 +188,9 @@ export function evaluateWifiAccess(
   const activeEntries = entries.filter((entry) => entry.isActive);
   if (activeEntries.length === 0) {
     return {
-      allowed: snapshot.isConnected,
+      allowed: snapshot.isWifi && snapshot.isConnected,
       noRestriction: true,
-      requiresWifiConnection: !snapshot.isConnected,
+      requiresWifiConnection: !snapshot.isWifi || !snapshot.isConnected,
       match: null,
     };
   }

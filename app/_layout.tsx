@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 
 import { theme } from '@/constants/theme';
+import { AuthAgentBootstrap } from '@/services/authAgent';
 
 export { ErrorBoundary } from 'expo-router';
 
@@ -24,6 +25,7 @@ const navTheme = {
 export default function RootLayout() {
   return (
     <ThemeProvider value={navTheme}>
+      <AuthAgentBootstrap />
       <StatusBar style="light" />
       <Stack
         screenOptions={{

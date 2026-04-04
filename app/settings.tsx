@@ -1,7 +1,7 @@
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
 import { Alert, StyleSheet, View } from 'react-native';
-import { Fingerprint, Globe, Info, LockKeyhole, Shield, Wifi } from 'lucide-react-native';
+import { Fingerprint, Globe, Info, Shield, Wifi } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 
 import { Card } from '@/components/ui/Card';
@@ -12,16 +12,19 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Body, Caption, Eyebrow, Subtitle, Title } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
-import { isBiometricAvailable } from '@/services/biometricService';
+import { authenticateWithBiometrics, isBiometricAvailable } from '@/services/biometricService';
 import { useAppStore } from '@/store/appStore';
 
 export default function SettingsScreen() {
   const settings = useAppStore((s) => s.settings);
   const biometricEnabled = useAppStore((s) => s.biometricEnabled);
-  const savedCredentials = useAppStore((s) => s.savedCredentials);
+  const biometricCredentialsStored = useAppStore((s) => s.biometricCredentialsStored);
+  const storedCredentialsAvailable = useAppStore((s) => s.storedCredentialsAvailable);
+  const lastLoginId = useAppStore((s) => s.lastLoginId);
+  const manualLoginDone = useAppStore((s) => s.manualLoginDone);
   const setSettings = useAppStore((s) => s.setSettings);
-  const setRememberMe = useAppStore((s) => s.setRememberMe);
-  const setBiometric = useAppStore((s) => s.setBiometric);
+  const enableBiometricAfterSuccessfulLogin = useAppStore((s) => s.enableBiometricAfterSuccessfulLogin);
+  const disableBiometric = useAppStore((s) => s.disableBiometric);
 
   const [hardwareAvailable, setHardwareAvailable] = useState(false);
   const version = Constants.expoConfig?.version ?? '1.0.1';
@@ -32,53 +35,32 @@ export default function SettingsScreen() {
     })();
   }, []);
 
-  async function onRememberToggle(nextValue: boolean) {
-    if (nextValue) {
-      await setRememberMe(true);
-      await appendActivityLog('info', 'Remember credentials toggled', { on: true });
-      return;
-    }
-
-    Alert.alert(
-      'Turn off Remember Me?',
-      'Turning off Remember Me will remove saved login credentials and disable fingerprint login. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Continue',
-          style: 'destructive',
-          onPress: () => {
-            void (async () => {
-              await setRememberMe(false);
-              await appendActivityLog('info', 'Remember credentials toggled', { on: false });
-            })();
-          },
-        },
-      ]
-    );
-  }
-
   async function onBiometricToggle(nextValue: boolean) {
     if (!nextValue) {
-      await setBiometric(false);
+      await disableBiometric();
       await appendActivityLog('info', 'Biometric toggled', { enabled: false });
       return;
     }
 
-    if (!settings.rememberCredentials) {
-      Alert.alert('Fingerprint Login', 'Enable Remember Me first to use fingerprint login.');
+    if (!manualLoginDone) {
+      Alert.alert('Fingerprint Login', 'Login successfully with ID and password first to enable fingerprint login.');
       return;
     }
-    if (!savedCredentials) {
-      Alert.alert('Fingerprint Login', 'Login successfully once to activate fingerprint login.');
-      return;
-    }
+
     if (!hardwareAvailable) {
       Alert.alert('Fingerprint Login', 'Biometric hardware is not available or not enrolled.');
       return;
     }
 
-    await setBiometric(true);
+    const auth = await authenticateWithBiometrics('Enable fingerprint login');
+    if (!auth.ok) return;
+
+    const enabled = await enableBiometricAfterSuccessfulLogin();
+    if (!enabled) {
+      Alert.alert('Fingerprint Login', 'Login successfully with ID and password first to enable fingerprint login.');
+      return;
+    }
+
     await appendActivityLog('info', 'Biometric toggled', { enabled: true });
   }
 
@@ -93,60 +75,50 @@ export default function SettingsScreen() {
       <Card style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
           <View>
-            <Caption style={styles.summaryLabel}>Security posture</Caption>
+            <Caption style={styles.summaryLabel}>Login state</Caption>
             <Body style={styles.summaryText}>
-              {settings.rememberCredentials
-                ? savedCredentials
-                  ? 'Saved credentials ready.'
-                  : 'Remember Me is on.'
-                : 'No saved credentials.'}
+              {lastLoginId ? `Last ID: ${lastLoginId}` : 'No successful login yet.'}
             </Body>
           </View>
-          <StatusBadge
-            tone={settings.rememberCredentials ? (savedCredentials ? 'success' : 'warning') : 'neutral'}
-            label={settings.rememberCredentials ? (savedCredentials ? 'Ready' : 'Pending') : 'Manual'}
-          />
+          <StatusBadge tone={biometricCredentialsStored ? 'success' : 'neutral'} label={biometricCredentialsStored ? 'Fingerprint Ready' : 'Manual Login'} />
         </View>
+        <Caption style={styles.summaryCaption}>
+          {storedCredentialsAvailable ? 'Credentials are stored securely for auto-login.' : 'Credentials will be stored securely after your first successful login.'}
+        </Caption>
       </Card>
 
       <SectionHeader title="Security" />
       <Card>
         <ListItem
-          title="Remember Me"
-          subtitle="Save last successful login."
-          icon={LockKeyhole}
-          trailing={<ToggleTrailing value={settings.rememberCredentials} onValueChange={onRememberToggle} />}
-        />
-        <ListItem
           title="Fingerprint Login"
           subtitle={
-            !settings.rememberCredentials
-              ? 'Enable Remember Me first to unlock biometric login.'
-              : !savedCredentials
-                ? 'Login once to activate.'
-                : hardwareAvailable
-                  ? 'Use saved credentials after fingerprint.'
-                  : 'Biometric hardware unavailable.'
+            !manualLoginDone
+              ? 'Login with ID and password first.'
+              : biometricCredentialsStored
+                ? 'Use stored credentials after fingerprint.'
+                : 'Enable after your latest manual login.'
           }
           icon={Fingerprint}
-          trailing={
-            <ToggleTrailing
-              value={biometricEnabled}
-              onValueChange={onBiometricToggle}
-              disabled={!hardwareAvailable}
-            />
-          }
+          trailing={<ToggleTrailing value={biometricEnabled} onValueChange={onBiometricToggle} disabled={!hardwareAvailable && !biometricEnabled} />}
         />
       </Card>
 
       <SectionHeader title="Network" />
       <Card>
         <ListItem
-          title="Firewall Endpoint"
-          subtitle={settings.firewallEndpoint}
-          icon={Globe}
-          onPress={() => router.push('/endpoint')}
+          title="Auto Login Agent"
+          subtitle={settings.autoLoginEnabled ? 'Automatically authenticate on allowed WiFi.' : 'Only detect WiFi and wait for manual action.'}
+          icon={Shield}
+          trailing={
+            <ToggleTrailing
+              value={settings.autoLoginEnabled}
+              onValueChange={async (v) => {
+                await setSettings({ autoLoginEnabled: v });
+              }}
+            />
+          }
         />
+        <ListItem title="Firewall Endpoint" subtitle={settings.firewallEndpoint} icon={Globe} onPress={() => router.push('/endpoint')} />
         <ListItem
           title="Allowed WiFi List"
           subtitle={`${settings.allowedWifi.filter((entry) => entry.isActive).length} active entries`}
@@ -170,12 +142,7 @@ export default function SettingsScreen() {
 
       <SectionHeader title="General" />
       <Card>
-        <ListItem
-          title="About"
-          subtitle="Version, app info, and features."
-          icon={Info}
-          onPress={() => router.push('/about')}
-        />
+        <ListItem title="About" subtitle="Version, app info, and features." icon={Info} onPress={() => router.push('/about')} />
         <Body style={styles.versionText}>WiFiGate v{version}</Body>
         <Caption style={styles.versionCaption}>Captive portal access app.</Caption>
       </Card>
@@ -212,6 +179,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     marginTop: 4,
     maxWidth: 220,
+  },
+  summaryCaption: {
+    marginTop: theme.spacing.sm,
   },
   versionText: {
     color: theme.colors.text,

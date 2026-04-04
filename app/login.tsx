@@ -2,38 +2,67 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { Fingerprint, KeyRound, LockKeyhole, Settings2, ShieldCheck, Wifi } from 'lucide-react-native';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Image, KeyboardAvoidingView, Platform, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
 import { z } from 'zod';
 
 import { PrimaryButton } from '@/components/ui/Button';
 import { InputField } from '@/components/ui/InputField';
 import { Screen } from '@/components/ui/Screen';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { Body, Caption, Title } from '@/components/ui/Typography';
+import { Body, Caption, Subtitle, Title } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
 import { authenticateWithBiometrics, isBiometricAvailable } from '@/services/biometricService';
-import { mapFailureToMessage, performFirewallLogin } from '@/services/firewallLogin';
-import { evaluateWifiAccess, getNetworkSnapshot } from '@/services/networkService';
-import { getSavedCredentials } from '@/services/secureCredentials';
+import {
+  beginManualFirewallLoginScope,
+  describeFirewallLoginFailure,
+  endManualFirewallLoginScope,
+  performFirewallLogin,
+} from '@/services/firewallLogin';
+import { fetchWifiLoginGate, wifiLoginGateLogMeta } from '@/services/wifiGateAuth';
+import { getBiometricCredentials, getSavedCredentials } from '@/services/secureCredentials';
 import { useAppStore } from '@/store/appStore';
 
 const schema = z.object({
   userId: z.string().min(1, 'ID is required'),
   password: z.string().min(1, 'Password is required'),
-  remember: z.boolean(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
+function confirmEnableBiometric(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Alert.alert('Enable Fingerprint Login', 'Use fingerprint for future logins?', [
+      { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Enable', onPress: () => resolve(true) },
+    ]);
+  });
+}
+
+function shouldOfferPortalFallback(reason?: string): boolean {
+  return (
+    reason === 'invalid_credentials' ||
+    reason === 'unexpected_response' ||
+    reason === 'parse_error' ||
+    reason === 'unreachable' ||
+    reason === 'timeout'
+  );
+}
+
 export default function LoginScreen() {
   const settings = useAppStore((s) => s.settings);
-  const savedCredentials = useAppStore((s) => s.savedCredentials);
+  const lastLoginId = useAppStore((s) => s.lastLoginId);
   const biometricEnabled = useAppStore((s) => s.biometricEnabled);
-  const setRememberMe = useAppStore((s) => s.setRememberMe);
-  const saveSuccessfulLogin = useAppStore((s) => s.saveSuccessfulLogin);
+  const biometricCredentialsStored = useAppStore((s) => s.biometricCredentialsStored);
+  const manualLoginDone = useAppStore((s) => s.manualLoginDone);
+  const storedCredentialsAvailable = useAppStore((s) => s.storedCredentialsAvailable);
+  const authAgent = useAppStore((s) => s.authAgent);
+  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
+  const recordSuccessfulManualLogin = useAppStore((s) => s.recordSuccessfulManualLogin);
+  const enableBiometricAfterSuccessfulLogin = useAppStore((s) => s.enableBiometricAfterSuccessfulLogin);
+  const beginPortalLoginFallback = useAppStore((s) => s.beginPortalLoginFallback);
   const setAuthenticated = useAppStore((s) => s.setAuthenticated);
 
   const [busy, setBusy] = useState(false);
@@ -42,13 +71,13 @@ export default function LoginScreen() {
   const [bioAvailable, setBioAvailable] = useState(false);
   const [netHint, setNetHint] = useState<string | null>(null);
   const [networkTone, setNetworkTone] = useState<'success' | 'warning' | 'error' | 'neutral'>('neutral');
+  const loginAttemptGenerationRef = useRef(0);
 
   const { control, getValues, handleSubmit, reset } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      userId: '',
+      userId: lastLoginId,
       password: '',
-      remember: settings.rememberCredentials,
     },
   });
 
@@ -59,110 +88,200 @@ export default function LoginScreen() {
   }, []);
 
   useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/(tabs)/home');
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
     const current = getValues();
     reset({
-      userId: settings.rememberCredentials ? savedCredentials?.userId ?? current.userId : '',
-      password: settings.rememberCredentials ? savedCredentials?.password ?? current.password : '',
-      remember: settings.rememberCredentials,
+      userId: lastLoginId || current.userId,
+      password: '',
     });
-  }, [getValues, reset, savedCredentials, settings.rememberCredentials]);
+  }, [getValues, lastLoginId, reset]);
 
   useEffect(() => {
     void (async () => {
-      const snap = await getNetworkSnapshot();
-      const access = evaluateWifiAccess(snap, settings.allowedWifi);
-
-      if (access.noRestriction) {
-        setNetHint('No WiFi restriction is configured. Login is allowed on any connected network.');
+      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      if (!gate.ok) {
+        setNetHint(gate.message);
+        setNetworkTone('error');
+        return;
+      }
+      const snap = gate.snapshot;
+      if (gate.access.noRestriction) {
+        setNetHint('Wi‑Fi connected. No allowlist — login is allowed on any Wi‑Fi.');
         setNetworkTone('warning');
-        return;
-      }
-      if (access.requiresWifiConnection) {
-        setNetHint('Connect to an allowed WiFi network before signing in.');
-        setNetworkTone('error');
-        return;
-      }
-      if (!access.match) {
-        setNetHint('Current WiFi is not in the allowed list.');
-        setNetworkTone('error');
         return;
       }
       if (settings.warnCellularInterference && snap.cellularMayInterfere) {
-        setNetHint('Android may still prefer mobile data. Disable it if login appears unreliable.');
+        setNetHint('Allowed Wi‑Fi connected. Mobile data may interfere with the portal.');
         setNetworkTone('warning');
         return;
       }
-      setNetHint('Connected to an authorized WiFi network.');
+      setNetHint('Allowed Wi‑Fi connected. You can sign in.');
       setNetworkTone('success');
     })();
   }, [settings.allowedWifi, settings.warnCellularInterference]);
 
   const canUseBiometric = useMemo(
-    () => bioAvailable && biometricEnabled && settings.rememberCredentials && Boolean(savedCredentials),
-    [bioAvailable, biometricEnabled, savedCredentials, settings.rememberCredentials]
+    () => bioAvailable && biometricEnabled && biometricCredentialsStored,
+    [bioAvailable, biometricCredentialsStored, biometricEnabled]
   );
 
-  async function runLoginFlow(userId: string, password: string) {
+  async function maybeEnableBiometricAfterLogin() {
+    if (!bioAvailable || biometricEnabled || biometricCredentialsStored) return;
+    const shouldEnable = await confirmEnableBiometric();
+    if (!shouldEnable) return;
+
+    const auth = await authenticateWithBiometrics('Enable fingerprint login');
+    if (!auth.ok) return;
+
+    const enabled = await enableBiometricAfterSuccessfulLogin();
+    if (enabled) {
+      await appendActivityLog('success', 'Fingerprint login enabled');
+    }
+  }
+
+  async function openPortalFallback(userId: string, password: string, source: 'manual' | 'biometric') {
+    beginPortalLoginFallback(userId, password, source);
+    await appendActivityLog('info', 'Opening browser-based portal fallback', { source });
+    router.push('/webview-login');
+  }
+
+  async function loginWithManualCredentials(userId: string, password: string) {
+    const attemptId = ++loginAttemptGenerationRef.current;
     setBusy(true);
     setError(null);
+    beginManualFirewallLoginScope();
     try {
-      const snap = await getNetworkSnapshot();
-      const access = evaluateWifiAccess(snap, settings.allowedWifi);
-
-      if (!access.allowed) {
-        setError(
-          access.requiresWifiConnection
-            ? 'Connect to an allowed WiFi network before logging in.'
-            : 'Current WiFi is not in the allowed list.'
-        );
-        await appendActivityLog('warn', 'Login blocked: WiFi not allowed', {
-          noRestriction: access.noRestriction,
-        });
+      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      if (attemptId !== loginAttemptGenerationRef.current) return;
+      if (!gate.ok) {
+        setError(gate.message);
+        await appendActivityLog('warn', 'Login blocked: network gate', wifiLoginGateLogMeta(gate));
         return;
       }
 
       await appendActivityLog('info', 'Firewall login attempt', {
-        noRestriction: access.noRestriction,
+        noRestriction: gate.access.noRestriction,
       });
 
       const res = await performFirewallLogin({
         baseUrl: settings.firewallEndpoint,
         userId,
         password,
+        initiator: 'manual',
       });
 
+      if (attemptId !== loginAttemptGenerationRef.current) return;
+
       if (!res.ok) {
-        const msg = mapFailureToMessage(res.reason);
-        setError(res.message ?? msg);
-        await appendActivityLog('error', 'Firewall login failed', { reason: res.reason ?? '' });
+        if (res.reason === 'cancelled') return;
+        setError(describeFirewallLoginFailure(res));
+        await appendActivityLog('error', 'Firewall login failed', {
+          reason: res.reason ?? '',
+          detail: res.message ?? '',
+          http: res.statusCode != null ? String(res.statusCode) : '',
+        });
+        if (shouldOfferPortalFallback(res.reason)) {
+          Alert.alert('Trying Portal Login', 'Direct login failed. WiFiGate can continue through the portal flow inside the app.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => void openPortalFallback(userId, password, 'manual') },
+          ]);
+        }
         return;
       }
 
-      const ts = await saveSuccessfulLogin(userId, password);
+      const ts = await recordSuccessfulManualLogin(userId, password);
       await setAuthenticated(true, ts);
+      await maybeEnableBiometricAfterLogin();
+      reset({ userId, password: '' });
       await appendActivityLog('success', 'Firewall login success');
       router.replace('/(tabs)/home');
     } catch (e) {
+      if (attemptId !== loginAttemptGenerationRef.current) return;
       setError(e instanceof Error ? e.message : 'Unexpected error');
       await appendActivityLog('error', 'Login exception', { message: String(e) });
     } finally {
+      endManualFirewallLoginScope();
       setBusy(false);
     }
   }
 
-  const onSubmit = handleSubmit((values) => runLoginFlow(values.userId, values.password));
+  const onSubmit = handleSubmit((values) => loginWithManualCredentials(values.userId, values.password));
 
-  async function onBiometric() {
-    const auth = await authenticateWithBiometrics('Unlock WiFiGate');
+  async function loginWithBiometricCredentials() {
+    const attemptId = ++loginAttemptGenerationRef.current;
+    setError(null);
+    const auth = await authenticateWithBiometrics('Login with fingerprint');
     if (!auth.ok) return;
 
-    const creds = await getSavedCredentials();
+    const creds = await getBiometricCredentials();
     if (!creds) {
-      setError('No remembered credentials found. Sign in manually once first.');
+      setError('Fingerprint credentials unavailable.');
       return;
     }
 
-    await runLoginFlow(creds.userId, creds.password);
+    setBusy(true);
+    beginManualFirewallLoginScope();
+    try {
+      const gate = await fetchWifiLoginGate(settings.allowedWifi);
+      if (attemptId !== loginAttemptGenerationRef.current) return;
+      if (!gate.ok) {
+        setError(gate.message);
+        await appendActivityLog('warn', 'Fingerprint login blocked: network gate', wifiLoginGateLogMeta(gate));
+        return;
+      }
+
+      const res = await performFirewallLogin({
+        baseUrl: settings.firewallEndpoint,
+        userId: creds.userId,
+        password: creds.password,
+        initiator: 'manual',
+      });
+
+      if (attemptId !== loginAttemptGenerationRef.current) return;
+
+      if (!res.ok) {
+        if (res.reason === 'cancelled') return;
+        setError(describeFirewallLoginFailure(res));
+        await appendActivityLog('error', 'Fingerprint login failed', {
+          reason: res.reason ?? '',
+          detail: res.message ?? '',
+          http: res.statusCode != null ? String(res.statusCode) : '',
+        });
+        if (shouldOfferPortalFallback(res.reason)) {
+          Alert.alert('Trying Portal Login', 'Direct fingerprint login failed. WiFiGate can continue through the portal flow inside the app.', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue', onPress: () => void openPortalFallback(creds.userId, creds.password, 'biometric') },
+          ]);
+        }
+        return;
+      }
+
+      await setAuthenticated(true, Date.now());
+      reset({ userId: creds.userId, password: '' });
+      await appendActivityLog('success', 'Fingerprint login success');
+      router.replace('/(tabs)/home');
+    } catch (e) {
+      if (attemptId !== loginAttemptGenerationRef.current) return;
+      setError(e instanceof Error ? e.message : 'Unexpected error');
+      await appendActivityLog('error', 'Fingerprint login exception', { message: String(e) });
+    } finally {
+      endManualFirewallLoginScope();
+      setBusy(false);
+    }
+  }
+
+  async function continuePortalWithStoredCredentials() {
+    const creds = await getSavedCredentials();
+    if (!creds) {
+      setError('Saved credentials are unavailable.');
+      return;
+    }
+    await openPortalFallback(creds.userId, creds.password, 'manual');
   }
 
   return (
@@ -189,12 +308,7 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.mainCard}>
-          <LinearGradient
-            colors={['#46e2d8', '#56c2ff', '#2e8fff']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.cardAccent}
-          />
+          <LinearGradient colors={['#46e2d8', '#56c2ff', '#2e8fff']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cardAccent} />
 
           <View style={styles.formTitleRow}>
             <View>
@@ -212,10 +326,10 @@ export default function LoginScreen() {
             name="userId"
             render={({ field, fieldState }) => (
               <InputField
-                label="User ID"
+                label="Login ID"
                 value={field.value}
                 onChangeText={field.onChange}
-                placeholder="WiFiGate ID"
+                placeholder="Login ID"
                 icon={KeyRound}
                 error={fieldState.error?.message}
                 autoCapitalize="none"
@@ -244,30 +358,6 @@ export default function LoginScreen() {
             )}
           />
 
-          <Controller
-            control={control}
-            name="remember"
-            render={({ field }) => (
-              <View style={styles.preferenceRow}>
-                <View style={styles.preferenceText}>
-                  <Body style={styles.preferenceTitle}>Remember</Body>
-                  <Caption numberOfLines={1}>Save credentials after success.</Caption>
-                </View>
-                <Switch
-                  value={field.value}
-                  onValueChange={async (v) => {
-                    field.onChange(v);
-                    await setRememberMe(v);
-                    setError(null);
-                    if (!v) {
-                      reset({ userId: '', password: '', remember: false });
-                    }
-                  }}
-                />
-              </View>
-            )}
-          />
-
           {error ? (
             <View style={styles.errorBox}>
               <StatusBadge tone="error" label="Failed" />
@@ -276,7 +366,7 @@ export default function LoginScreen() {
           ) : null}
 
           <PrimaryButton
-            title={busy ? 'Connecting…' : 'Sign in'}
+            title={busy ? 'Connecting...' : 'Sign in'}
             onPress={onSubmit}
             loading={busy}
             disabled={busy}
@@ -286,31 +376,14 @@ export default function LoginScreen() {
 
           {canUseBiometric ? (
             <View style={styles.secondaryAction}>
-              <PrimaryButton
-                title="Fingerprint"
-                variant="secondary"
-                onPress={onBiometric}
-                disabled={busy}
-                icon={Fingerprint}
-              />
+              <PrimaryButton title="Login with Fingerprint" variant="secondary" onPress={loginWithBiometricCredentials} disabled={busy} icon={Fingerprint} />
             </View>
+          ) : manualLoginDone && bioAvailable && !biometricCredentialsStored ? (
+            <Caption style={styles.helperText}>Sign in with ID and password first to enable fingerprint.</Caption>
           ) : null}
 
           <View style={styles.utilityRow}>
-            <PrimaryButton
-              title="Settings"
-              variant="ghost"
-              onPress={() => router.push('/(tabs)/settings')}
-              icon={Settings2}
-              style={styles.utilityButton}
-            />
-            <PrimaryButton
-              title="Browser"
-              variant="ghost"
-              onPress={() => router.push('/webview-login')}
-              icon={Wifi}
-              style={styles.utilityButton}
-            />
+            <PrimaryButton title="Settings" variant="ghost" onPress={() => router.push('/(tabs)/settings')} icon={Settings2} style={styles.utilityButton} />
           </View>
 
           <View style={styles.dividerMuted} />
@@ -319,10 +392,64 @@ export default function LoginScreen() {
           <Text style={styles.endpointMono} numberOfLines={2} selectable>
             {settings.firewallEndpoint}
           </Text>
-          {!settings.rememberCredentials ? (
-            <Caption style={styles.footerHint}>Fingerprint needs Remember.</Caption>
-          ) : biometricEnabled && !savedCredentials ? (
-            <Caption style={styles.footerHint}>Sign in once to enable fingerprint.</Caption>
+
+          <View style={styles.dividerMuted} />
+
+          <View style={styles.quickStatusRow}>
+            <Caption style={styles.quickStatusLabel}>Saved credentials</Caption>
+            <StatusBadge
+              tone={storedCredentialsAvailable ? 'success' : 'neutral'}
+              label={storedCredentialsAvailable ? 'Available' : 'None'}
+            />
+          </View>
+          <Caption style={styles.quickStatusHint}>
+            {storedCredentialsAvailable
+              ? 'Auto-login can run when Wi‑Fi is ready and enabled in Settings.'
+              : 'Successful sign-in stores ID and password in secure storage for next launch.'}
+          </Caption>
+
+          <View style={styles.dividerMuted} />
+
+          <View style={styles.networkSection}>
+            <View style={styles.networkHeaderRow}>
+              <View style={styles.networkTitleLeft}>
+                <ShieldCheck color={theme.colors.primary} size={16} strokeWidth={2.2} />
+                <Caption style={styles.networkSectionLabel}>Agent status</Caption>
+              </View>
+              <StatusBadge
+                tone={
+                  authAgent.status === 'authenticated'
+                    ? 'success'
+                    : authAgent.status === 'authenticating' || authAgent.status === 'checking'
+                      ? 'warning'
+                      : authAgent.status === 'needs_portal' || authAgent.status === 'error' || authAgent.status === 'blocked'
+                        ? 'error'
+                        : 'neutral'
+                }
+                label={
+                  authAgent.status === 'authenticated'
+                    ? 'Live'
+                    : authAgent.status === 'authenticating'
+                      ? 'Login'
+                      : authAgent.status === 'checking'
+                        ? 'Check'
+                        : authAgent.status === 'needs_portal'
+                          ? 'Portal'
+                          : authAgent.status === 'needs_credentials'
+                            ? 'Setup'
+                            : authAgent.status === 'paused'
+                              ? 'Paused'
+                              : 'Idle'
+                }
+              />
+            </View>
+            <Text style={styles.networkHintBody}>{authAgent.message}</Text>
+          </View>
+
+          {authAgent.status === 'needs_portal' && storedCredentialsAvailable ? (
+            <View style={styles.secondaryAction}>
+              <PrimaryButton title="Continue in Portal" variant="secondary" onPress={() => void continuePortalWithStoredCredentials()} icon={Wifi} />
+            </View>
           ) : null}
 
           <View style={styles.dividerMuted} />
@@ -335,18 +462,10 @@ export default function LoginScreen() {
               </View>
               <StatusBadge
                 tone={networkTone}
-                label={
-                  networkTone === 'success'
-                    ? 'Ready'
-                    : networkTone === 'warning'
-                      ? 'Warn'
-                      : networkTone === 'error'
-                        ? 'Blocked'
-                        : 'Wait'
-                }
+                label={networkTone === 'success' ? 'Ready' : networkTone === 'warning' ? 'Warn' : networkTone === 'error' ? 'Blocked' : 'Wait'}
               />
             </View>
-            <Text style={styles.networkHintBody}>{netHint ?? 'Checking WiFi status…'}</Text>
+            <Text style={styles.networkHintBody}>{netHint ?? 'Checking WiFi status...'}</Text>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -422,41 +541,6 @@ const styles = StyleSheet.create({
     height: 3,
     opacity: 0.95,
   },
-  networkSection: {
-    marginTop: theme.spacing.xs,
-  },
-  networkHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-  },
-  networkTitleLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: theme.spacing.sm,
-    flex: 1,
-    minWidth: 0,
-  },
-  networkSectionLabel: {
-    color: theme.colors.cyan,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    fontSize: 11,
-  },
-  networkHintBody: {
-    color: theme.colors.text,
-    fontSize: 13,
-    lineHeight: 20,
-    letterSpacing: -0.15,
-  },
-  dividerMuted: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: theme.colors.border,
-    marginTop: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
   formTitleRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -493,23 +577,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 11,
   },
-  preferenceRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    marginTop: -theme.spacing.xs,
-  },
-  preferenceText: {
-    flex: 1,
-  },
-  preferenceTitle: {
-    color: theme.colors.text,
-    fontWeight: '700',
-    marginBottom: 2,
-    fontSize: 14,
-  },
   errorBox: {
     gap: theme.spacing.sm,
     marginBottom: theme.spacing.md,
@@ -525,6 +592,9 @@ const styles = StyleSheet.create({
   secondaryAction: {
     marginTop: theme.spacing.sm,
   },
+  helperText: {
+    marginTop: theme.spacing.sm,
+  },
   utilityRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
@@ -532,6 +602,12 @@ const styles = StyleSheet.create({
   },
   utilityButton: {
     flex: 1,
+  },
+  dividerMuted: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: theme.colors.border,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   endpointLabel: {
     color: theme.colors.textSoft,
@@ -547,8 +623,53 @@ const styles = StyleSheet.create({
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' }),
     lineHeight: 17,
   },
-  footerHint: {
-    marginTop: theme.spacing.sm,
+  quickStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.xs,
+  },
+  quickStatusLabel: {
     color: theme.colors.textSoft,
+    fontWeight: '700',
+    fontSize: 11,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  quickStatusHint: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginBottom: theme.spacing.xs,
+  },
+  networkSection: {
+    marginTop: theme.spacing.xs,
+  },
+  networkHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+  },
+  networkTitleLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  networkSectionLabel: {
+    color: theme.colors.cyan,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    fontSize: 11,
+  },
+  networkHintBody: {
+    color: theme.colors.text,
+    fontSize: 13,
+    lineHeight: 20,
+    letterSpacing: -0.15,
   },
 });

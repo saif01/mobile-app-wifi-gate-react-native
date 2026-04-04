@@ -33,6 +33,23 @@ export interface SavedCredentials {
   lastLoginAt: string;
 }
 
+export type PortalSessionState =
+  | 'authenticated'
+  | 'authentication_required'
+  | 'unknown'
+  | 'offline';
+
+export interface PortalSessionProbeResult {
+  state: PortalSessionState;
+  portalUrl?: string;
+  message?: string;
+}
+
+export interface BiometricAuthState {
+  biometricEnabled: boolean;
+  biometricCredentialsStored: boolean;
+}
+
 export interface NetworkSnapshot {
   isConnected: boolean;
   type: string | null;
@@ -59,11 +76,35 @@ export type FirewallLoginFailureReason =
   | 'unreachable'
   | 'unexpected_response'
   | 'parse_error'
-  | 'cancelled';
+  | 'cancelled'
+  /** Auto-login skipped because a manual attempt is active */
+  | 'deferred';
 
 export interface FirewallLoginResult {
   ok: boolean;
   reason?: FirewallLoginFailureReason;
   message?: string;
   statusCode?: number;
+}
+
+export type AuthAgentStatus =
+  | 'idle'
+  | 'offline'
+  | 'blocked'
+  | 'ready'
+  | 'checking'
+  | 'authenticating'
+  | 'authenticated'
+  | 'needs_credentials'
+  | 'needs_portal'
+  | 'error'
+  | 'paused';
+
+export interface AuthAgentSnapshot {
+  status: AuthAgentStatus;
+  message: string;
+  targetSsid: string | null;
+  lastCheckedAt: number | null;
+  lastAttemptAt: number | null;
+  lastError?: string;
 }
