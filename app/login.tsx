@@ -533,6 +533,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   logoShell: {
+    flexShrink: 0,
     borderRadius: theme.radius.md,
     overflow: 'hidden',
     borderWidth: 1,
@@ -542,16 +543,18 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   logoCore: {
-    width: 48,
-    height: 48,
+    width: 52,
+    height: 52,
+    padding: 4,
     borderRadius: theme.radius.sm,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.surfaceStrong,
   },
   logoImage: {
-    width: 30,
-    height: 30,
+    width: '100%',
+    height: '100%',
   },
   mainCard: {
     backgroundColor: theme.colors.surface,
