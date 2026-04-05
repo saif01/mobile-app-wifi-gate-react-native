@@ -40,5 +40,9 @@ yarn-error.*
 /ios
 /android
 
-# Play upload signing (if android/ is ever tracked)
-android/keystore.properties
+# Allow Play upload signing files to be committed
+!/android/
+!/android/app/
+!/android/app/upload-keystore.jks
+!/android/keystore.properties
+!/android/.play-signing-passwords.txt
