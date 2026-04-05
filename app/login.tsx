@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import { Fingerprint, KeyRound, LockKeyhole, ShieldCheck, Wifi } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
-import { Alert, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { z } from 'zod';
 
@@ -317,6 +317,11 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.loginKav}
         keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}>
+        <ScrollView
+          style={styles.loginScroll}
+          contentContainerStyle={styles.loginScrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}>
         <View style={styles.loginStack}>
           <View style={styles.loginMain}>
             <View style={styles.headerSection}>
@@ -462,6 +467,7 @@ export default function LoginScreen() {
             <Caption style={styles.footerVersion}>Version {appVersion}</Caption>
           </View>
         </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </Screen>
   );
@@ -470,14 +476,20 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   loginScreenOuter: {
     flex: 1,
-    paddingTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.xs,
   },
   loginKav: {
     flex: 1,
   },
-  loginStack: {
+  loginScroll: {
     flex: 1,
+  },
+  loginScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingVertical: theme.spacing.md,
+  },
+  loginStack: {
+    width: '100%',
   },
   loginMain: {
     flexShrink: 1,
