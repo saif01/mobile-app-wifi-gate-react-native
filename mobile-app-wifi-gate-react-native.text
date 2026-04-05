@@ -29,6 +29,17 @@ Fresh build android apk for production in local
     ./gradlew clean -x :app:externalNativeBuildCleanDebug -x :app:externalNativeBuildCleanRelease
     ./gradlew assembleRelease
     
+    for windows cmd
+    .\gradlew --stop
+    Remove-Item -Recurse -Force .\.gradle, .\build, .\app\build, .\app\.cxx -ErrorAction SilentlyContinue
+    .\gradlew clean
+
+    ### For Installable .apk build
+    ./gradlew assembleRelease
+    ### For playstore .aab build
+    .\gradlew bundleRelease
+
+    
 
 
 Fresh build android apk for production by expo

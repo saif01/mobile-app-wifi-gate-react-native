@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Play upload signing (if android/ is ever tracked)
+android/keystore.properties
