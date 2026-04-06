@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   const disableBiometric = useAppStore((s) => s.disableBiometric);
 
   const [hardwareAvailable, setHardwareAvailable] = useState(false);
-  const version = Constants.expoConfig?.version ?? '1.0.3';
+  const version = Constants.expoConfig?.version ?? '1.0.4';
 
   useEffect(() => {
     void (async () => {

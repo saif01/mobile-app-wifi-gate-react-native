@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Globe, LayoutGrid, Logs, Settings, ShieldCheck, Wifi } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '@/constants/theme';
 
@@ -18,6 +19,9 @@ function TabIcon({
 }
 
 export default function TabsLayout() {
+  const insets = useSafeAreaInsets();
+  const safeBottom = Math.max(insets.bottom, 8);
+
   return (
     <Tabs
       screenOptions={{
@@ -27,19 +31,19 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontSize: 11,
           fontWeight: '700',
-          marginBottom: 4,
+          marginBottom: 0,
         },
         tabBarStyle: {
           position: 'absolute',
           left: 16,
           right: 16,
-          bottom: 16,
-          height: 72,
+          bottom: 4,
+          height: 68 + safeBottom,
           borderRadius: 28,
           backgroundColor: 'rgba(9, 20, 35, 0.94)',
           borderTopWidth: 0,
-          paddingTop: 8,
-          paddingBottom: 8,
+          paddingTop: 6,
+          paddingBottom: safeBottom + 4,
           shadowColor: '#02101d',
           shadowOffset: { width: 0, height: 10 },
           shadowOpacity: 0.34,
