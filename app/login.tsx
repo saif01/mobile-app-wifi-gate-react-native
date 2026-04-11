@@ -54,7 +54,7 @@ function shouldOfferPortalFallback(reason?: string): boolean {
 }
 
 export default function LoginScreen() {
-  const appVersion = Constants.expoConfig?.version ?? '1.0.4';
+  const appVersion = Constants.expoConfig?.version ?? '1.0.5';
   const insets = useSafeAreaInsets();
   const settings = useAppStore((s) => s.settings);
   const lastLoginId = useAppStore((s) => s.lastLoginId);
@@ -349,7 +349,7 @@ export default function LoginScreen() {
 
           <View style={styles.formTitleRow}>
             <View>
-              <Caption style={styles.sectionEyebrow}>Session</Caption>
+              <Caption style={styles.sectionEyebrow}>Login</Caption>
               <Title style={styles.signInTitle}>{skipPortalNetwork ? 'No portal' : 'Sign in'}</Title>
             </View>
             <View style={styles.portalPill}>

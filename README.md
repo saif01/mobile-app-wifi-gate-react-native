@@ -16,15 +16,25 @@ The original product specification is in [`docs/srs.text`](docs/srs.text).
 | **Concurrent login** | Manual login can **preempt** auto-login; auto-login **defers** while a manual attempt is in progress (no “another login in progress” deadlock). |
 | **Secure credentials** | After a **successful** manual (or configured WebView) login, **user ID and password** are stored in **Expo SecureStore** (not plain AsyncStorage). |
 | **Auto-login agent** | When **Auto Login Agent** is on, **NetInfo** + **app foreground** trigger a sync: probe portal session, then call direct login with saved credentials if needed. |
-| **Startup** | Splash hydrates settings, waits for the **first auth/network sync**, then routes to **Home** or **Session** based on session state. |
+| **Startup** | Splash hydrates settings, waits for the **first auth/network sync**, then routes to **Home** or **Login** based on session state. |
 | **Web Portal** | Modal **Web Portal** screen: full-screen **WebView** to the resolved portal URL; optional **injected script** auto-fills Sophos `#username` / `#password` and calls `submitRequest()` when opened from the fallback flow. |
 | **Logout** | **Logout** calls the portal **`logout.xml`** (e.g. Sophos `mode=193`) when possible **and** the current network is **not** on the no-portal list; then clears the **in-app session** flag and last-login time. **Saved credentials are not removed** so auto-login can run again after the next successful portal sign-in. |
-| **Biometrics** | After at least one successful manual login, user can enable **Fingerprint Login** in Settings; Session screen can sign in via biometrics + stored credentials. |
-| **Session (Login)** | Sign-in (or **Continue** on no-portal Wi‑Fi), optional fingerprint, **WiFi status**, and **Continue in Portal** when the agent requires the WebView. Footer: **Powered By CPB-IT** and app **version**. Firewall URL and other options live under **Settings** (no Settings shortcut on this screen). |
+| **Biometrics** | After at least one successful manual login, user can enable **Fingerprint Login** in Settings; **Login** tab can sign in via biometrics + stored credentials. |
+| **Login** | Sign-in (or **Continue** on no-portal Wi‑Fi), optional fingerprint, **WiFi status**, and **Continue in Portal** when the agent requires the WebView. Footer: **Powered By CPB-IT** and app **version**. Firewall URL and other options live under **Settings** (no Settings shortcut on this screen). |
 | **Settings** | Firewall endpoint editor, **Wi‑Fi lists** (portal allowlist + no-portal list), **Auto Login Agent**, **Warn about mobile data**, biometric toggle, link to **About**. |
-| **Dashboard (Home)** | Wi‑Fi/access/session overview, **credentials** / **auto-login** chips, **last login**, refresh, reconnect, **Web Portal**, logout. |
+| **Dashboard (Home)** | Wi‑Fi/access/session overview, **Account profile** (AD user details from CPB IT API when credentials are saved—password expiry, collapsible common fields, refresh), **credentials** / **auto-login** chips, **last login**, refresh, reconnect, **Web Portal**, logout. |
 | **Activity logs** | Local **append-only style** log (info/warn/error/success) with a cap (see `constants/defaults.ts`). |
 | **About** | In-app version, capability summary, company/support links (`app/about.tsx`). |
+
+**Release 1.0.5** adds the dashboard **Account profile** integration above; see **Changelog** below.
+
+---
+
+## Changelog
+
+### 1.0.5
+
+- **Dashboard — Account profile**: After a successful login with **saved credentials**, the app fetches **Active Directory / directory user details** from the CPB IT endpoint (`services/adUserDetails.ts`, `POST` with login + password). The dashboard shows a collapsible **Account profile** card: **password expiration** highlighted (remaining days as title, expiry **date/time** as `DD/MM/YYYY HH:MM AM/PM`), **Common information** for other fields (date-like values use the same format), a **refresh** control to refetch, pull-to-refresh also updates profile data, and a **warning** when password expiry is within **15 days** (or already expired). The first and last rows of the common-field list are omitted; remaining rows are reordered so the **last two appear at the top**.
 
 ---
 
@@ -115,7 +125,7 @@ npx eas-cli@latest update --branch production --message "Describe change"
 ## Navigation overview
 
 - **Splash** (`app/index.tsx`) → **Tabs** main UI or legacy stack routes as configured.
-- **Tabs** (`app/(tabs)/`): **Home** (dashboard), **WiFi** (portal + no-portal lists), **Session** (login), **Logs**, **Settings**. The **browser** tab is hidden from the bar but routes exist for **Web Portal** (`/(tabs)/browser` re-exports `webview-login`).
+- **Tabs** (`app/(tabs)/`): **Home** (dashboard), **WiFi** (portal + no-portal lists), **Login** (`session.tsx`), **Logs**, **Settings**. The **browser** tab is hidden from the bar but routes exist for **Web Portal** (`/(tabs)/browser` re-exports `webview-login`).
 - **Stack** (see `app/_layout.tsx`): **Firewall Endpoint**, **About**, **Biometric Login**, **Web Portal** (modal, title **Web Portal**), plus hidden routes for **login** / **dashboard** / **logs** / **settings** / **wifi** as needed by deep links.
 
 ---
@@ -125,18 +135,18 @@ npx eas-cli@latest update --branch production --message "Describe change"
 | Setting | Purpose |
 |---------|---------|
 | **Firewall Endpoint** | Base URL for the portal; normalized in `settingsService` (default includes `httpclient.html` where applicable). Edited on **Firewall Endpoint** screen with validation. |
-| **WiFi lists** | **No portal**: networks without captive portal—no firewall auto-login, Session screen offers **Continue to app**, and logout skips **`logout.xml`**. **Portal login required**: same allowlist rules as before (SSID and/or gateway/IP; active/paused). **Empty active portal list** ⇒ portal login allowed on **any Wi‑Fi** (still must be Wi‑Fi, not cellular-only). A network cannot be in both lists. |
+| **WiFi lists** | **No portal**: networks without captive portal—no firewall auto-login, **Login** screen offers **Continue to app**, and logout skips **`logout.xml`**. **Portal login required**: same allowlist rules as before (SSID and/or gateway/IP; active/paused). **Empty active portal list** ⇒ portal login allowed on **any Wi‑Fi** (still must be Wi‑Fi, not cellular-only). A network cannot be in both lists. |
 | **Auto Login Agent** | When enabled, background sync runs **probe + login** on portal-eligible Wi‑Fi with saved credentials; no-portal Wi‑Fi is marked authenticated locally without calling the portal. |
-| **Warn About Mobile Data** | Surfaces a warning on the Session screen when Android may have **cellular + Wi‑Fi** (dual transport). |
+| **Warn About Mobile Data** | Surfaces a warning on the **Login** screen when Android may have **cellular + Wi‑Fi** (dual transport). |
 | **Fingerprint Login** | Tied to **manual login completed** + hardware; enabling prompts biometric auth. |
 
 ---
 
 ## Flows (how it works)
 
-### 1. Manual login (Session tab)
+### 1. Manual login (Login tab)
 
-1. **Wi‑Fi gate** (`services/wifiGateAuth.ts`): must be on Wi‑Fi and satisfy policy (portal allowlist if configured, or a **no-portal** match). On no-portal Wi‑Fi, the Session screen skips direct portal login and can continue without credentials. The Session UI (`app/login.tsx`) is intentionally minimal: network hint and portal fallback only, not a duplicate settings or agent dashboard.
+1. **Wi‑Fi gate** (`services/wifiGateAuth.ts`): must be on Wi‑Fi and satisfy policy (portal allowlist if configured, or a **no-portal** match). On no-portal Wi‑Fi, the **Login** screen skips direct portal login and can continue without credentials. The login UI (`app/login.tsx`) is intentionally minimal: network hint and portal fallback only, not a duplicate settings or agent dashboard.
 2. **Direct login** (`services/firewallLogin.ts`): Sophos XML path first when URL/HTML matches, else generic form POST; detailed errors via `describeFirewallLoginFailure`.
 3. On success: **SecureStore** credentials + session flag, optional biometric offer, navigate **Home**.
 
@@ -179,6 +189,7 @@ On network change and when the app becomes **active**:
 | UI | `app/` | Screens, Expo Router |
 | State | `store/appStore.ts` | Hydration, session, settings, auth agent snapshot, portal fallback payload |
 | Portal HTTP | `services/firewallLogin.ts` | Login, logout, session probe, Cyberoam + generic form |
+| Directory / profile API | `services/adUserDetails.ts` | CPB IT AD user details for dashboard profile card |
 | Wi‑Fi policy gate | `services/wifiGateAuth.ts` | Single place for “allowed to attempt login?” messaging |
 | Network | `services/networkService.ts` | Snapshot, portal + no-portal list matching, SSID (with Android location permission) |
 | Auto-login | `services/authAgent.tsx` | NetInfo + AppState → `syncAuthAgent` |
@@ -226,7 +237,7 @@ Declared in **`app.json`**: network/Wi‑Fi state, **fine/coarse location** (SSI
 app/                 # Routes: splash, tabs, login, dashboard, settings, endpoint, wifi, biometric, logs, webview-login, about
 components/          # UI primitives, AboutCard
 constants/           # theme, defaults
-services/            # firewall, network, auth agent, credentials, settings, logs, biometrics, wifiGateAuth
+services/            # firewall, network, auth agent, credentials, settings, logs, biometrics, wifiGateAuth, adUserDetails
 store/               # Zustand app store
 types/               # Shared TypeScript models
 utils/               # e.g. endpoint normalization

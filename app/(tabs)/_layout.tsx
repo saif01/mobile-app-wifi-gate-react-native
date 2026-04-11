@@ -72,7 +72,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="session"
         options={{
-          title: 'Session',
+          title: 'Login',
           tabBarIcon: ({ color, size, focused }) => <TabIcon color={color} size={size} focused={focused} Icon={ShieldCheck} />,
         }}
       />

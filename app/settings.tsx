@@ -27,7 +27,7 @@ export default function SettingsScreen() {
   const disableBiometric = useAppStore((s) => s.disableBiometric);
 
   const [hardwareAvailable, setHardwareAvailable] = useState(false);
-  const version = Constants.expoConfig?.version ?? '1.0.4';
+  const version = Constants.expoConfig?.version ?? '1.0.5';
 
   useEffect(() => {
     void (async () => {
@@ -162,7 +162,7 @@ export default function SettingsScreen() {
           subtitle={
             settings.autoLoginEnabled
               ? 'When Wi‑Fi allows portal login, syncs session and signs in with saved credentials if needed.'
-              : 'Background auto-login is off — use manual sign-in on the Session tab.'
+              : 'Background auto-login is off — use manual sign-in on the Login tab.'
           }
           icon={Radar}
           iconTint="success"

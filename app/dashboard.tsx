@@ -2,8 +2,11 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import {
+  AlertTriangle,
   ArrowRightLeft,
   Bot,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Globe,
   Key,
@@ -11,11 +14,12 @@ import {
   LogOut,
   RefreshCw,
   ShieldCheck,
+  UserRound,
   Wifi,
   WifiOff,
 } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { PrimaryButton } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
@@ -24,7 +28,18 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Body, Caption, Eyebrow, Title } from '@/components/ui/Typography';
 import { theme } from '@/constants/theme';
 import { appendActivityLog } from '@/services/activityLog';
+import {
+  fetchAdUserDetails,
+  formatDdMmYyyyHmAmPm,
+  formatProfileValueIfDateTime,
+  getPasswordExpiryRawFromDetails,
+  parseExpiryDate,
+  PASSWORD_EXPIRY_WARNING_DAYS,
+  shouldWarnPasswordExpiry,
+  type AdUserDetails,
+} from '@/services/adUserDetails';
 import { evaluateWifiAccess, getNetworkSnapshot } from '@/services/networkService';
+import { getSavedCredentials } from '@/services/secureCredentials';
 import type { NetworkSnapshot } from '@/types/models';
 import { useAppStore } from '@/store/appStore';
 
@@ -37,6 +52,48 @@ function toneColor(tone: 'success' | 'error' | 'warning' | 'neutral') {
       : tone === 'warning'
         ? theme.colors.warning
         : theme.colors.textSoft;
+}
+
+function formatPasswordRemaining(days: number | null): string {
+  if (days == null) return '';
+  if (days < 0) return 'Expired';
+  if (days === 0) return 'Expires today';
+  if (days === 1) return '1 day left';
+  return `${days} days left`;
+}
+
+function passwordExpiryVisual(days: number | null): 'danger' | 'warning' | 'success' | 'neutral' {
+  if (days == null) return 'neutral';
+  if (days < 0) return 'danger';
+  if (shouldWarnPasswordExpiry(days)) return 'warning';
+  return 'success';
+}
+
+function daysUntilFromExpiryDate(expiry: Date): number {
+  const now = new Date();
+  const a = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const b = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate()).getTime();
+  return Math.round((b - a) / 86400000);
+}
+
+function resolveProfileExpiryDateTime(p: AdUserDetails | null | undefined): Date | null {
+  if (!p) return null;
+  if (p.passwordExpiresAt && !Number.isNaN(p.passwordExpiresAt.getTime())) {
+    return p.passwordExpiresAt;
+  }
+  const raw = getPasswordExpiryRawFromDetails(p);
+  if (!raw) return null;
+  const parsed = parseExpiryDate(raw);
+  if (!parsed || Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function resolveProfileExpiryDays(p: AdUserDetails | null | undefined): number | null {
+  if (!p) return null;
+  if (p.daysUntilPasswordExpiry != null) return p.daysUntilPasswordExpiry;
+  const d = resolveProfileExpiryDateTime(p);
+  if (d) return daysUntilFromExpiryDate(d);
+  return null;
 }
 
 function StatBlock({
@@ -85,6 +142,11 @@ export default function DashboardScreen() {
   const [snap, setSnap] = useState<NetworkSnapshot | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
+  const [profile, setProfile] = useState<AdUserDetails | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileExpanded, setProfileExpanded] = useState(false);
+
   const access = useMemo(
     () => (snap ? evaluateWifiAccess(snap, settings.allowedWifi, settings.noLoginWifi) : null),
     [settings.allowedWifi, settings.noLoginWifi, snap]
@@ -95,16 +157,50 @@ export default function DashboardScreen() {
     setSnap(s);
   }, []);
 
+  const loadProfile = useCallback(async () => {
+    if (!isAuthenticated || !storedCredentialsAvailable) {
+      setProfile(null);
+      setProfileError(null);
+      setProfileLoading(false);
+      return;
+    }
+    setProfileLoading(true);
+    setProfileError(null);
+    try {
+      const creds = await getSavedCredentials();
+      if (!creds) {
+        setProfile(null);
+        setProfileError('No saved credentials.');
+        return;
+      }
+      const result = await fetchAdUserDetails(creds.userId, creds.password);
+      if (result.ok) {
+        setProfile(result.details);
+        setProfileError(null);
+      } else {
+        setProfileError(result.message);
+        setProfile((prev) => prev);
+      }
+    } catch (e) {
+      setProfileError(e instanceof Error ? e.message : 'Could not load profile.');
+      setProfile((prev) => prev);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [isAuthenticated, storedCredentialsAvailable]);
+
   useFocusEffect(
     useCallback(() => {
       void refresh();
-    }, [refresh])
+      void loadProfile();
+    }, [refresh, loadProfile])
   );
 
   async function onRefresh() {
     setRefreshing(true);
     try {
       await refresh();
+      await loadProfile();
       await appendActivityLog('info', 'Status refreshed');
     } finally {
       setRefreshing(false);
@@ -147,6 +243,44 @@ export default function DashboardScreen() {
     : authAgent.status === 'error' || authAgent.status === 'needs_portal'
       ? 'Failed · try browser'
       : 'Not signed in';
+
+  const profileDetailRows = useMemo(() => {
+    if (!profile) return [];
+    const hide = profile.passwordExpiryRowKey;
+    return profile.rows.filter((r) => r.key !== hide);
+  }, [profile]);
+
+  const profileCollapsibleRows = useMemo(() => {
+    const middle = profileDetailRows.slice(1, -1);
+    if (middle.length <= 2) return middle;
+    return [...middle.slice(-2), ...middle.slice(0, -2)];
+  }, [profileDetailRows]);
+
+  const resolvedProfileExpiryDays = useMemo(() => resolveProfileExpiryDays(profile), [profile]);
+
+  const profileExpiryTitleText = useMemo(() => {
+    if (!profile) return 'No expiry info';
+    if (resolvedProfileExpiryDays != null) return formatPasswordRemaining(resolvedProfileExpiryDays);
+    const raw = getPasswordExpiryRawFromDetails(profile);
+    if (raw) return raw;
+    return 'No expiry info';
+  }, [profile, resolvedProfileExpiryDays]);
+
+  const profileExpirySubtitleText = useMemo(() => {
+    const d = resolveProfileExpiryDateTime(profile);
+    if (!d) return 'No date';
+    return formatDdMmYyyyHmAmPm(d);
+  }, [profile]);
+
+  const expiryVisual = passwordExpiryVisual(resolvedProfileExpiryDays);
+  const expiryColor =
+    expiryVisual === 'danger'
+      ? theme.colors.danger
+      : expiryVisual === 'warning'
+        ? theme.colors.warning
+        : expiryVisual === 'success'
+          ? theme.colors.success
+          : theme.colors.cyan;
 
   return (
     <Screen>
@@ -234,6 +368,102 @@ export default function DashboardScreen() {
             />
           </View>
         </View>
+
+        {/* ── Profile (directory) ─────────────────────────────────────── */}
+        <Card style={styles.profileCard}>
+          <View style={styles.profileHeaderRow}>
+            <View style={styles.profileTitleRow}>
+              <View style={styles.profileTitleIcon}>
+                <UserRound color={theme.colors.cyan} size={16} strokeWidth={2.2} />
+              </View>
+              <Caption style={styles.profileEyebrow}>Account profile</Caption>
+            </View>
+            <Pressable
+              onPress={() => void loadProfile()}
+              disabled={profileLoading || !isAuthenticated || !storedCredentialsAvailable}
+              style={({ pressed }) => [styles.profileRefreshBtn, pressed && styles.profileRefreshPressed]}
+              accessibilityRole="button"
+              accessibilityLabel="Refresh profile">
+              {profileLoading ? (
+                <ActivityIndicator size="small" color={theme.colors.primary} />
+              ) : (
+                <RefreshCw color={theme.colors.primary} size={18} strokeWidth={2.2} />
+              )}
+            </Pressable>
+          </View>
+
+          {!isAuthenticated || !storedCredentialsAvailable ? (
+            <Caption style={styles.profileHint}>
+              Save your password at sign-in to load directory details here after login.
+            </Caption>
+          ) : profileLoading && !profile && !profileError ? (
+            <View style={styles.profileLoadingBlock}>
+              <ActivityIndicator color={theme.colors.cyan} />
+              <Caption style={styles.profileHint}>Loading profile…</Caption>
+            </View>
+          ) : profileError && !profile ? (
+            <Caption style={styles.profileError}>{profileError}</Caption>
+          ) : (
+            <>
+              <Pressable
+                onPress={() => setProfileExpanded((v) => !v)}
+                style={({ pressed }) => [styles.profileExpiryHero, pressed && styles.profileExpiryPressed]}
+                accessibilityRole="button"
+                accessibilityLabel={profileExpanded ? 'Collapse profile details' : 'Expand profile details'}>
+                <View style={[styles.profileExpiryAccent, { backgroundColor: `${expiryColor}33` }]} />
+                <View style={styles.profileExpiryHeroInner}>
+                  <Caption style={[styles.profileExpiryLabel, { color: expiryColor }]}>Password expiration</Caption>
+                  <Title style={[styles.profileExpiryMain, { color: expiryColor }]} numberOfLines={3}>
+                    {profileExpiryTitleText}
+                  </Title>
+                  <Caption style={styles.profileExpirySub}>{profileExpirySubtitleText}</Caption>
+                </View>
+                {profileExpanded ? (
+                  <ChevronUp color={theme.colors.textSoft} size={20} strokeWidth={2.2} />
+                ) : (
+                  <ChevronDown color={theme.colors.textSoft} size={20} strokeWidth={2.2} />
+                )}
+              </Pressable>
+
+              {profileError && profile ? <Caption style={styles.profileErrorMuted}>{profileError}</Caption> : null}
+
+              {profile &&
+              shouldWarnPasswordExpiry(resolvedProfileExpiryDays) &&
+              isAuthenticated ? (
+                <View style={styles.profileWarn}>
+                  <AlertTriangle color={theme.colors.warning} size={16} strokeWidth={2.3} />
+                  <Caption style={styles.profileWarnText}>
+                    {resolvedProfileExpiryDays != null && resolvedProfileExpiryDays < 0
+                      ? 'Your password has expired. Change it immediately.'
+                      : `Your password expires in under ${PASSWORD_EXPIRY_WARNING_DAYS} days. Change it as early as possible.`}
+                  </Caption>
+                </View>
+              ) : null}
+
+              {profileExpanded && profile ? (
+                <View style={styles.profileBody}>
+                  <Caption style={styles.profileBodyEyebrow}>Common information</Caption>
+                  {profileCollapsibleRows.length === 0 ? (
+                    <Caption style={styles.profileHint}>
+                      {profileDetailRows.length === 0
+                        ? 'No additional fields returned.'
+                        : 'No fields to display.'}
+                    </Caption>
+                  ) : (
+                    profileCollapsibleRows.map((row) => (
+                      <View key={row.key} style={styles.profileKv}>
+                        <Caption style={styles.profileKvLabel}>{row.label}</Caption>
+                        <Body style={styles.profileKvValue} numberOfLines={6}>
+                          {formatProfileValueIfDateTime(row.value)}
+                        </Body>
+                      </View>
+                    ))
+                  )}
+                </View>
+              ) : null}
+            </>
+          )}
+        </Card>
 
         {/* ── Session card ─────────────────────────────────────────────── */}
         <Card style={styles.sessionCard}>
@@ -447,6 +677,171 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.borderStrong,
     marginHorizontal: theme.spacing.sm,
   },
+
+  // ── Profile card ────────────────────────────────────────────────────────
+  profileCard: {
+    marginBottom: theme.spacing.md,
+    padding: theme.spacing.lg,
+    overflow: 'hidden',
+  },
+  profileHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.sm,
+  },
+  profileTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  profileTitleIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: 'rgba(70, 226, 216, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileEyebrow: {
+    color: theme.colors.cyan,
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  profileRefreshBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(86, 194, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileRefreshPressed: {
+    opacity: 0.82,
+  },
+  profileHint: {
+    color: theme.colors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  profileLoadingBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    paddingVertical: theme.spacing.sm,
+  },
+  profileError: {
+    color: theme.colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  profileErrorMuted: {
+    color: theme.colors.warning,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: theme.spacing.xs,
+  },
+  profileExpiryHero: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.borderStrong,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    overflow: 'hidden',
+    marginTop: theme.spacing.xs,
+  },
+  profileExpiryPressed: {
+    opacity: 0.92,
+  },
+  profileExpiryAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 4,
+  },
+  profileExpiryHeroInner: {
+    flex: 1,
+    paddingVertical: theme.spacing.md,
+    paddingLeft: theme.spacing.md + 4,
+    paddingRight: theme.spacing.sm,
+    gap: 4,
+    minWidth: 0,
+  },
+  profileExpiryLabel: {
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.55,
+    textTransform: 'uppercase',
+  },
+  profileExpiryMain: {
+    fontSize: 22,
+    letterSpacing: -0.4,
+    fontWeight: '800',
+  },
+  profileExpirySub: {
+    color: theme.colors.textSoft,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  profileWarn: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
+    padding: theme.spacing.sm,
+    borderRadius: theme.radius.sm,
+    backgroundColor: 'rgba(255, 179, 71, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 179, 71, 0.28)',
+  },
+  profileWarnText: {
+    flex: 1,
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  profileBody: {
+    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  profileBodyEyebrow: {
+    color: theme.colors.textSoft,
+    fontWeight: '700',
+    fontSize: 10,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    marginBottom: theme.spacing.xs,
+  },
+  profileKv: {
+    gap: 3,
+    paddingVertical: 6,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: theme.colors.border,
+  },
+  profileKvLabel: {
+    color: theme.colors.textSoft,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+  },
+  profileKvValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+
   dividerMuted: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: theme.colors.border,
