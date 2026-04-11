@@ -1,0 +1,35 @@
+WiFiGate — Play Store release notes (v1.0.5)
+============================================
+
+Use the "SHORT" block below in Play Console → Release → Release notes (EN).
+Google often limits this field to ~500 characters per language—trim SHORT if needed.
+
+
+SHORT (paste-friendly, ~500 chars max — verify in console)
+------------------------------------------------------------
+What's new in 1.0.5
+
+• Home: new Account profile after sign-in—see password expiry (days left) and expiry date/time
+• Refresh your directory info from the profile card or by pulling down on Home
+• Warning if your password expires within 15 days or has already expired
+• Directory details in an expandable section; dates shown as DD/MM/YYYY with 12-hour time
+• Bottom tab renamed Login (clearer than Session)
+• Stability improvements
+
+
+ORDERED BULLETS (same content, sorted by theme)
+------------------------------------------------
+1. New: Account profile on Home (password expiry + directory details when credentials are saved)
+2. Refresh: Profile card button + pull-to-refresh on Home updates profile data
+3. Safety: Expiry warning under 15 days or when expired
+4. UI: Expandable “Common information”; consistent date/time formatting
+5. Navigation: Session tab renamed to Login
+6. General: Fixes and stability
+
+
+FULLER (internal / website — optional)
+---------------------------------------
+• Integrates CPB IT Active Directory user-details API on the dashboard after successful login with saved credentials.
+• Password expiration highlighted with remaining days and formatted local date/time.
+• Collapsible common fields; date-like values formatted as DD/MM/YYYY HH:MM AM/PM.
+• First/last rows omitted from the common-field list; remaining rows reordered (last two shown first).
